@@ -20,6 +20,7 @@ import {
 import type { PiEngine } from "../src/agent/models.ts";
 import type { ModelImageResizeOptions } from "../src/agent/image-processing/index.ts";
 import type { HeadlessApi } from "../src/agent/subagents/headless.ts";
+import { libraryCopy, TEST_LIBRARY } from "./helpers/library.ts";
 
 // Install storage/auth seams BEFORE importing the agent composition root.
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "lh-agent-image-paths-"));
@@ -34,6 +35,7 @@ process.env = {
 	HOME: path.join(scratch, "home"),
 	LH_DATA_DIR: path.join(scratch, "data"),
 	LH_AUTH_FILE: path.join(scratch, "auth.json"),
+	LH_LIBRARY_DIR: TEST_LIBRARY,
 };
 globalThis.fetch = async () => { throw new Error("CLOSED: unexpected network request"); };
 after(() => {
@@ -47,7 +49,7 @@ const { createTeacherAgent, createProberAgent, createPracticeAgent } = await imp
 const { runPdfReaderAgent } = await import("../src/agent/subagents/pdf-reader.ts");
 const { runVisualMaker } = await import("../src/agent/subagents/visual-maker.ts");
 
-const PDF = path.join(import.meta.dirname, "fixtures", "sample-3page.pdf");
+const PDF = libraryCopy(path.join(import.meta.dirname, "fixtures", "sample-3page.pdf"));
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="4800" height="120" viewBox="0 0 4800 120"><rect width="4800" height="120" fill="white"/></svg>';
 const CUSTOM_RESIZE = { maxWidth: 320, maxHeight: 200 };
 
@@ -136,7 +138,7 @@ function assertProcessedImage(context: TranscriptContext, expected: { width: num
 
 test("shared teacher read detects valid image content under a non-image extension", async () => {
 	const bytes = png(24, 16);
-	const file = path.join(scratch, "lecture-notes.txt");
+	const file = path.join(TEST_LIBRARY, "lecture-notes.txt");
 	fs.writeFileSync(file, bytes);
 	const { engine, requests } = scripted(readSteps(file));
 	// Pass the actual shared read tool, exercising the teacher's native clone
@@ -155,7 +157,7 @@ test("shared teacher read detects valid image content under a non-image extensio
 test("shared read omits corrupt recognized images without exposing a raw image fallback", async () => {
 	// Valid signature/IHDR, missing pixel data: sniff succeeds, decode fails.
 	const bytes = png(24, 16).subarray(0, 33);
-	const file = path.join(scratch, "corrupt.png");
+	const file = path.join(TEST_LIBRARY, "corrupt.png");
 	fs.writeFileSync(file, bytes);
 	const { engine, requests } = scripted(readSteps(file));
 	await createTeacherAgent(undefined, { engine, tools: { read: readTool } }).prompt("Inspect the file.");
@@ -166,7 +168,7 @@ test("shared read omits corrupt recognized images without exposing a raw image f
 });
 
 test("shared read supplies the native nonvision-model note", async () => {
-	const file = path.join(scratch, "nonvision.png");
+	const file = path.join(TEST_LIBRARY, "nonvision.png");
 	fs.writeFileSync(file, png(24, 16));
 	const { engine, requests } = scripted(readSteps(file), undefined, false);
 	await createTeacherAgent(undefined, { engine, tools: { read: readTool } }).prompt("Inspect the file.");
@@ -176,7 +178,7 @@ test("shared read supplies the native nonvision-model note", async () => {
 
 test("teacher read binds independent active-model resize limits without mutating the shared tool", async () => {
 	const bytes = png(640, 320);
-	const file = path.join(scratch, "model-bound.png");
+	const file = path.join(TEST_LIBRARY, "model-bound.png");
 	fs.writeFileSync(file, bytes);
 	const originalExecute = readTool.execute;
 	const a = scripted(readSteps(file), { maxWidth: 96, maxHeight: 64 });
@@ -196,8 +198,8 @@ for (const [role, resize, expected] of [
 ] as const) {
 	test(`${role}'s actual registry retains argument healing and text reads while binding image limits`, async () => {
 		const bytes = png(640, 320);
-		const imageFile = path.join(scratch, `${role}-actual-registry.png`);
-		const textFile = path.join(scratch, `${role}-actual-registry.txt`);
+		const imageFile = path.join(TEST_LIBRARY, `${role}-actual-registry.png`);
+		const textFile = path.join(TEST_LIBRARY, `${role}-actual-registry.txt`);
 		fs.writeFileSync(imageFile, bytes);
 		fs.writeFileSync(textFile, "first\nsecond\nthird\nfourth\nfifth");
 		const { engine, requests } = scripted([

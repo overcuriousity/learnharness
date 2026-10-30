@@ -8,7 +8,7 @@ import { parseHTML } from "linkedom";
 import { SetupDialog } from "../components/setup-dialog.tsx";
 import type { ModelCatalogEntry } from "../src/core/contracts/models.ts";
 
-// As in render-update-banner: mount real React handlers against an isolated
+// Mount real React handlers against an isolated
 // DOM. Fetch is wholly stubbed; no key, settings, or session writes can escape.
 const dom = parseHTML("<html><body></body></html>");
 Object.assign(globalThis, {

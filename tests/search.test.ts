@@ -11,7 +11,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveSearchEngineFor, tavilyProvider, braveProvider } from "../src/server/search.ts";
+import { braveProvider, parseSearxngBaseUrl, resolveSearchEngineFor, SEARXNG_TIMEOUT_MS, searxngProvider, tavilyProvider } from "../src/server/search.ts";
+import { maskKey, validateKeyShape } from "../src/core/auth-keys.ts";
+import { resolveKeyStatuses } from "../src/server/keys.ts";
 
 describe("resolveSearchEngineFor (the auto-detect decision)", () => {
 	it("no keys: honestly unavailable, no default", () => {
@@ -129,5 +131,142 @@ describe("braveProvider (wire shape per Brave's dashboard docs, verified 2026-09
 			new Response("rate limited", { status: 429 }),
 		);
 		await assert.rejects(provider.search("q", 5), /Brave search API 429/);
+	});
+});
+
+describe("SearXNG as the third engine (server fork; upstream order Tavily → Brave → SearXNG)", () => {
+	it("a SearXNG URL alone makes SearXNG the engine", () => {
+		const out = resolveSearchEngineFor(undefined, { searxng: "https://search.example.org" });
+		assert.ok(out.available);
+		assert.equal(out.engine, "searxng");
+		assert.equal(out.key, "https://search.example.org");
+	});
+
+	it("with Tavily or Brave also keyed and no pin, upstream's order wins", () => {
+		assert.equal(resolveSearchEngineFor(undefined, { tavily: "tvly-throwaway-key-00001", searxng: "https://s.example" }).engine, "tavily");
+		assert.equal(resolveSearchEngineFor(undefined, { brave: "brave-throwaway-key-00001", searxng: "https://s.example" }).engine, "brave");
+	});
+
+	it("an explicit SearXNG pin wins over keyed Tavily/Brave, and never falls back without its URL", () => {
+		assert.equal(resolveSearchEngineFor("searxng", { tavily: "tvly-throwaway-key-00001", searxng: "https://s.example" }).engine, "searxng");
+		const missing = resolveSearchEngineFor("searxng", { tavily: "tvly-throwaway-key-00001" });
+		assert.equal(missing.available, false);
+		assert.match(missing.reason, /SEARXNG_URL/);
+	});
+
+	it("an invalid SEARXNG_URL never counts as configured", () => {
+		for (const bad of [undefined, "", "search.example.org", "ftp://s.example", "https://u:p@s.example", "https://s.example/?a=1", "https://s.example/#x"]) {
+			assert.equal(parseSearxngBaseUrl(bad), null, String(bad));
+		}
+		assert.equal(parseSearxngBaseUrl("https://search.example.org/"), "https://search.example.org");
+		assert.equal(parseSearxngBaseUrl(" http://10.0.0.5:8888/searx/ "), "http://10.0.0.5:8888/searx");
+	});
+});
+
+type Call = { url: URL; init: RequestInit };
+
+function searxngFetch(response: () => Response | Promise<Response>) {
+	const calls: Call[] = [];
+	const fetchFn = async (url: string, init: RequestInit): Promise<Response> => {
+		calls.push({ url: new URL(url), init });
+		return response();
+	};
+	return { calls, fetchFn };
+}
+
+const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status });
+
+describe("searxngProvider (SearXNG search API)", () => {
+	it("GETs {base}/search with q, format=json, pageno=1, categories=general, safesearch=0 and no language", async () => {
+		const { calls, fetchFn } = searxngFetch(json({ results: [] }));
+		await searxngProvider("https://search.example.org/searx", undefined, fetchFn).search("sigma.js v3", 5);
+		assert.equal(calls.length, 1);
+		const { url, init } = calls[0]!;
+		assert.equal(`${url.origin}${url.pathname}`, "https://search.example.org/searx/search");
+		assert.deepEqual(Object.fromEntries(url.searchParams), {
+			q: "sigma.js v3",
+			format: "json",
+			pageno: "1",
+			categories: "general",
+			safesearch: "0",
+		});
+		assert.equal(init.method ?? "GET", "GET");
+		assert.ok(init.signal instanceof AbortSignal, "every request carries a timeout signal");
+		assert.equal((init.headers as Record<string, string>).authorization, undefined);
+	});
+
+	it("sends SEARXNG_AUTH_HEADER verbatim as the Authorization header", async () => {
+		const { calls, fetchFn } = searxngFetch(json({ results: [] }));
+		await searxngProvider("https://search.example.org", "Basic dXNlcjpwYXNz", fetchFn).search("q", 3);
+		assert.equal((calls[0]!.init.headers as Record<string, string>).authorization, "Basic dXNlcjpwYXNz");
+	});
+
+	it("maps title/url/content, skips entries without a URL, cuts to count, collapses newlines, caps snippets at 500", async () => {
+		const long = "x".repeat(600);
+		const { fetchFn } = searxngFetch(json({
+			results: [
+				{ title: "A", url: "https://a.example/", content: "line1\n  line2" },
+				{ title: "no url", content: "dropped" },
+				{ url: "https://b.example/", content: long },
+				{ title: "C", url: "https://c.example/", content: "c" },
+			],
+		}));
+		const hits = await searxngProvider("https://s.example", undefined, fetchFn).search("q", 2);
+		assert.deepEqual(hits, [
+			{ title: "A", url: "https://a.example/", snippet: "line1 line2" },
+			{ title: "https://b.example/", url: "https://b.example/", snippet: "x".repeat(500) },
+		]);
+	});
+
+	it("403 explains that JSON output must be enabled on the instance", async () => {
+		const { fetchFn } = searxngFetch(() => new Response("Forbidden", { status: 403 }));
+		await assert.rejects(
+			searxngProvider("https://s.example", undefined, fetchFn).search("q", 5),
+			/403.*search\.formats: \[html, json\]/s,
+		);
+	});
+
+	it("429 points at the limiter's pass list", async () => {
+		const { fetchFn } = searxngFetch(() => new Response("Too Many Requests", { status: 429 }));
+		await assert.rejects(
+			searxngProvider("https://s.example", undefined, fetchFn).search("q", 5),
+			/429.*limiter.*pass list/s,
+		);
+	});
+
+	it("other HTTP errors surface the status", async () => {
+		const { fetchFn } = searxngFetch(() => new Response("boom", { status: 502 }));
+		await assert.rejects(searxngProvider("https://s.example", undefined, fetchFn).search("q", 5), /SearXNG 502: boom/);
+	});
+
+	it("a timeout becomes a clear 15 s error (the adapter's AbortSignal.timeout)", async () => {
+		assert.equal(SEARXNG_TIMEOUT_MS, 15_000);
+		const fetchFn = async (_url: string, init: RequestInit): Promise<Response> => {
+			// Simulate the timeout signal firing (no real waiting).
+			assert.ok(init.signal);
+			throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+		};
+		await assert.rejects(searxngProvider("https://s.example", undefined, fetchFn).search("q", 5), /did not answer within 15 s/);
+	});
+});
+
+describe("SearXNG keys in the auth catalog", () => {
+	it("SEARXNG_URL accepts only http(s) base URLs", () => {
+		assert.deepEqual(validateKeyShape("SEARXNG_URL", "https://search.example.org"), { ok: true });
+		assert.deepEqual(validateKeyShape("SEARXNG_URL", "http://127.0.0.1:8888/"), { ok: true });
+		for (const bad of ["search.example.org", "file:///etc/passwd", "https://u:p@s.example", "https://s.example/?x=1"]) {
+			assert.equal(validateKeyShape("SEARXNG_URL", bad).ok, false, bad);
+		}
+	});
+
+	it("SEARXNG_AUTH_HEADER is a single-line value and is never returned, not even masked", () => {
+		assert.deepEqual(validateKeyShape("SEARXNG_AUTH_HEADER", "Basic dXNlcjpwYXNz"), { ok: true });
+		assert.equal(validateKeyShape("SEARXNG_AUTH_HEADER", "Basic a\nX-Evil: 1").ok, false);
+		const secret = "Basic c2VjcmV0OnZhbHVlUTk=";
+		const rows = resolveKeyStatuses({ SEARXNG_AUTH_HEADER: secret, SEARXNG_URL: "https://s.example" }, {}, new Set());
+		const header = rows.find((r) => r.id === "SEARXNG_AUTH_HEADER")!;
+		assert.equal(header.present, true);
+		assert.equal(header.masked, "••••");
+		assert.ok(!JSON.stringify(rows).includes(maskKey(secret).slice(1)), "no tail of the header leaks");
 	});
 });

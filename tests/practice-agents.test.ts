@@ -22,6 +22,7 @@ import { CONCLUDE_ACK_TEXT } from "../src/core/contracts/chat.ts";
 import { concludeInputObject, concludeTool, createPracticeGate, problemTool, practiceTools } from "../src/agent/tools/practice.ts";
 import { composeInstructions, createPracticeAgent } from "../src/agent/teacher-agent.ts";
 import { allSegmentPaths } from "../src/agent/prompt-segments.ts";
+import { TEST_LIBRARY } from "./helpers/library.ts";
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 

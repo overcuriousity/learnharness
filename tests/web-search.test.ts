@@ -28,7 +28,7 @@ describe("web_search on the injected port (web.ts)", () => {
 		assert.ok(web_search, "web_search is still exposed without a provider");
 		const out = await web_search!.execute!("c1", { query: "anything" });
 		const missing = "web_search is not available: no search engine is configured. " +
-			"Set a Tavily or Brave search API key in settings. Report in your brief that web search is unavailable.";
+			"Set a Tavily or Brave search API key, or a SearXNG URL, in settings. Report in your brief that web search is unavailable.";
 		assert.equal(out.details, missing);
 		assert.deepEqual(out.content, [{ type: "text", text: missing }]);
 		assert.notEqual(out.isError, true, "missing keys remain ordinary recoverable text, not a native error");
@@ -260,6 +260,7 @@ describe("keyless research dispatch (jobTools)", () => {
 
 import { createProberTools, createTeacherTools } from "../src/agent/tools.ts";
 import type { ChatStore } from "../src/core/ports.ts";
+import { TEST_LIBRARY } from "./helpers/library.ts";
 
 /** A chat-store stub — the registry factories only CLOSE OVER it at build
  *  time (quiz/plan superRefines read it at execute time, never here). */

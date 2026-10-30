@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 
@@ -10,6 +9,7 @@ import { findTool } from "../src/agent/tools/find.ts";
 import { grepTool } from "../src/agent/tools/grep.ts";
 import { lsTool } from "../src/agent/tools/ls.ts";
 import { readTool } from "../src/agent/tools/read.ts";
+import { TEST_LIBRARY } from "./helpers/library.ts";
 
 /**
  * The learner-filesystem tools (sources v1, 2026-09-19): ls/find/grep as
@@ -17,7 +17,7 @@ import { readTool } from "../src/agent/tools/read.ts";
  * through absolute paths — the tools' relative resolution targets the real
  * home, which tests must not touch.
  *
- * Fixture tree (tmpdir):
+ * Fixture tree (inside the test library folder):
  *   notes/calculus.md         "The derivative measures force…"
  *   notes/linear.txt          eigenvector content
  *   notes/sub/hidden.md
@@ -39,7 +39,7 @@ async function runText(tool: AgentTool<any>, params: unknown, signal?: AbortSign
 }
 
 async function setup(): Promise<string> {
-	const root = await fs.mkdtemp(path.join(os.tmpdir(), "lh-fs-"));
+	const root = await fs.mkdtemp(path.join(TEST_LIBRARY, "lh-fs-"));
 	await fs.mkdir(path.join(root, "notes", "sub"), { recursive: true });
 	await fs.mkdir(path.join(root, "code"), { recursive: true });
 	await fs.mkdir(path.join(root, "node_modules"), { recursive: true });
@@ -105,7 +105,7 @@ describe("ls (pi port)", () => {
 	});
 
 	it("missing path and non-directory throw (the model sees the error)", async () => {
-		await assert.rejects(async () => lsTool.execute!("c", { path: "/nonexistent/xyz" }), /Path not found/);
+		await assert.rejects(async () => lsTool.execute!("c", { path: path.join(FIXTURE, "nonexistent", "xyz") }), /Path not found/);
 		await assert.rejects(
 			async () => lsTool.execute!("c", { path: path.join(FIXTURE, "binary.bin") }),
 			/Not a directory/,
@@ -199,7 +199,7 @@ describe("read (home-anchored re-port)", () => {
 
 describe("abort plumbing (the 2026-09-19 cascade fix)", () => {
 	it("walkFiles stops promptly when the signal aborts mid-walk", async () => {
-		const root = await fs.mkdtemp(path.join(os.tmpdir(), "lh-fs-abort-"));
+		const root = await fs.mkdtemp(path.join(TEST_LIBRARY, "lh-fs-abort-"));
 		for (let i = 0; i < 20; i++) await fs.writeFile(path.join(root, `f${i}.txt`), "needle\n");
 		const ac = new AbortController();
 		let visited = 0;
@@ -237,7 +237,7 @@ describe("abort plumbing (the 2026-09-19 cascade fix)", () => {
 		// the walk+scan outlast an abort mid-flight. Whichever phase the
 		// abort lands in, the tool returns promptly with an abort notice —
 		// never "No matches found", never a hang.
-		const root = await fs.mkdtemp(path.join(os.tmpdir(), "lh-fs-midabort-"));
+		const root = await fs.mkdtemp(path.join(TEST_LIBRARY, "lh-fs-midabort-"));
 		await fs.mkdir(path.join(root, "deep"), { recursive: true });
 		for (let i = 0; i < 200; i++) {
 			await fs.writeFile(path.join(root, i % 2 ? `f${i}.txt` : `deep/f${i}.txt`), "needle line\n");

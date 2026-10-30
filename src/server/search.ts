@@ -1,6 +1,7 @@
 /**
  * The search engines' server composition (search port + model slots wave,
- * 2026-09-20): the Tavily + Brave adapters behind the core port
+ * 2026-09-20; SearXNG added by the server fork): the Tavily, Brave and
+ * SearXNG adapters behind the core port
  * (core/search.ts) + the live-engine resolution the settings UI and the
  * agent-layer tool both read.
  *
@@ -19,6 +20,7 @@
  * tool depends on the PORT only and tests never touch the network.
  */
 
+import { isSearxngBaseUrl } from "../core/auth-keys.ts";
 import type { SearchEngineId, SearchHit, SearchProvider, SearchStatus } from "../core/search.ts";
 import { keyValue } from "./keys.ts";
 import { effectiveSettings } from "./stores.ts";
@@ -108,20 +110,102 @@ export function braveProvider(apiKey: string, fetchFn: FetchLike = fetch): Searc
 	};
 }
 
-/** The engines this wave ships, in PREFERENCE order (both keys present,
- *  no explicit pin → the first live engine wins; owner decision
- *  2026-09-20: Tavily first — the AI-native search API the wave chose). */
+/** Per-request timeout (owner spec: 15 s). */
+export const SEARXNG_TIMEOUT_MS = 15_000;
+
+/** Parse a SearXNG base URL (shape rule shared with the key gate,
+ *  core/auth-keys.ts isSearxngBaseUrl). Returns the base with no trailing
+ *  slash, or null when invalid. */
+export function parseSearxngBaseUrl(raw: string | undefined): string | null {
+	const value = raw?.trim();
+	if (!value || !isSearxngBaseUrl(value)) return null;
+	return new URL(value).href.replace(/\/+$/, "");
+}
+
+/** SearXNG search API: GET {base}/search?q=…&format=json&pageno=1
+ *  &categories=general&safesearch=0. JSON output must be enabled on the
+ *  instance (settings.yml search.formats: [html, json]) — otherwise it
+ *  answers 403. The API has no result-count parameter: the first `count`
+ *  entries of results[] are kept. */
+export function searxngProvider(baseUrl: string, authHeader?: string, fetchFn: FetchLike = fetch): SearchProvider {
+	return {
+		id: "searxng",
+		async search(query: string, count: number): Promise<SearchHit[]> {
+			const url = new URL(`${baseUrl}/search`);
+			url.searchParams.set("q", query);
+			url.searchParams.set("format", "json");
+			url.searchParams.set("pageno", "1");
+			url.searchParams.set("categories", "general");
+			url.searchParams.set("safesearch", "0");
+			const headers: Record<string, string> = { accept: "application/json" };
+			if (authHeader) headers.authorization = authHeader;
+			let resp: Response;
+			try {
+				resp = await fetchFn(url.toString(), { headers, signal: AbortSignal.timeout(SEARXNG_TIMEOUT_MS) });
+			} catch (err) {
+				if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+					throw new Error(`SearXNG did not answer within ${SEARXNG_TIMEOUT_MS / 1000} s`);
+				}
+				throw new Error(`SearXNG request failed: ${err instanceof Error ? err.message : String(err)}`);
+			}
+			if (resp.status === 403) {
+				throw new Error(
+					"SearXNG answered 403 Forbidden: the instance must allow JSON output " +
+					"(settings.yml: search.formats: [html, json]).",
+				);
+			}
+			if (resp.status === 429) {
+				throw new Error(
+					"SearXNG answered 429 Too Many Requests: its limiter (bot detection) blocked this server. " +
+					"Add the LearnHarness host to the limiter's pass list, or turn the limiter off for a private instance.",
+				);
+			}
+			if (!resp.ok) {
+				const text = await resp.text().catch(() => "");
+				throw new Error(`SearXNG ${resp.status}: ${text.slice(0, 200)}`);
+			}
+			const data = (await resp.json()) as {
+				results?: Array<{ title?: string; url?: string; content?: string }>;
+			};
+			return (data.results ?? [])
+				.filter((r) => typeof r.url === "string" && r.url)
+				.slice(0, count)
+				.map((r) => ({
+					title: r.title ?? r.url ?? "",
+					url: r.url ?? "",
+					snippet: (r.content ?? "").replace(/\s*\n\s*/g, " ").slice(0, 500),
+				}));
+		},
+	};
+}
+
+/** The engines this build ships, in PREFERENCE order (several keyed, no
+ *  explicit pin → the first live engine wins; owner decision 2026-09-20:
+ *  Tavily first; server fork: SearXNG appended last). SearXNG's "key" is
+ *  its base URL. */
 const ENGINE_ORDER: ReadonlyArray<{ id: SearchEngineId; envVar: string }> = [
 	{ id: "tavily", envVar: "TAVILY_API_KEY" },
 	{ id: "brave", envVar: "BRAVE_API_KEY" },
+	{ id: "searxng", envVar: "SEARXNG_URL" },
 ];
 
+/** The env var that makes an engine live (for the missing-key reason). */
+function engineEnvVar(id: SearchEngineId): string {
+	return ENGINE_ORDER.find((e) => e.id === id)!.envVar;
+}
+
 /** The engine's key (env-or-file; env wins) — null when the engine is
- *  not keyed, which by owner decision means NOT LIVE. */
+ *  not keyed, which by owner decision means NOT LIVE. An invalid
+ *  SEARXNG_URL counts as not keyed (never a guess). */
 function engineKey(id: SearchEngineId): string | null {
-	const envVar = ENGINE_ORDER.find((e) => e.id === id)?.envVar;
-	const value = envVar ? keyValue(envVar) : undefined;
+	const value = keyValue(engineEnvVar(id));
+	if (id === "searxng") return parseSearxngBaseUrl(value);
 	return value ? value : null;
+}
+
+/** Every engine's live key, for resolveSearchEngineFor. */
+function engineKeys(): Partial<Record<SearchEngineId, string | undefined>> {
+	return Object.fromEntries(ENGINE_ORDER.map(({ id }) => [id, engineKey(id) ?? undefined]));
 }
 
 /** Resolve the search state PURELY from the given pins (testable): the
@@ -138,7 +222,9 @@ export function resolveSearchEngineFor(
 			return {
 				available: false,
 				engine: null,
-				reason: `search engine is set to "${pinned}" but its API key is missing — set the ${pinned === "tavily" ? "TAVILY_API_KEY" : "BRAVE_API_KEY"} key`,
+				reason: pinned === "searxng"
+					? `search engine is set to "searxng" but SEARXNG_URL is missing or not a valid http(s) base URL`
+					: `search engine is set to "${pinned}" but its API key is missing — set the ${engineEnvVar(pinned)} key`,
 				key: null,
 			};
 		}
@@ -151,7 +237,7 @@ export function resolveSearchEngineFor(
 	return {
 		available: false,
 		engine: null,
-		reason: "no search engine configured — set a Tavily or Brave search API key",
+		reason: "no search engine configured — set a Tavily or Brave search API key, or SEARXNG_URL",
 		key: null,
 	};
 }
@@ -160,13 +246,7 @@ export function resolveSearchEngineFor(
  *  settings record's pin + the auth store fresh each call, so a key saved
  *  mid-session activates on the next check (no restart). */
 export function searchStatus(): SearchStatus {
-	const { available, engine, reason } = resolveSearchEngineFor(
-		effectiveSettings().agent.search?.engine,
-		{
-			tavily: engineKey("tavily") ?? undefined,
-			brave: engineKey("brave") ?? undefined,
-		},
-	);
+	const { available, engine, reason } = resolveSearchEngineFor(effectiveSettings().agent.search?.engine, engineKeys());
 	return { available, engine, reason };
 }
 
@@ -180,10 +260,8 @@ export function searchAvailable(): boolean {
  *  the tool layer (Teacher stream) calls this once per search, so key
  *  rotations take effect immediately. */
 export function searchProvider(): SearchProvider | null {
-	const resolved = resolveSearchEngineFor(effectiveSettings().agent.search?.engine, {
-		tavily: engineKey("tavily") ?? undefined,
-		brave: engineKey("brave") ?? undefined,
-	});
+	const resolved = resolveSearchEngineFor(effectiveSettings().agent.search?.engine, engineKeys());
 	if (!resolved.available || !resolved.key) return null;
+	if (resolved.engine === "searxng") return searxngProvider(resolved.key, keyValue("SEARXNG_AUTH_HEADER") || undefined);
 	return resolved.engine === "tavily" ? tavilyProvider(resolved.key) : braveProvider(resolved.key);
 }

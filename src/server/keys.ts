@@ -44,6 +44,7 @@ import {
 	AUTH_PROVIDER_KEYS,
 	AUTH_PROVIDER_ENV_VARS,
 	CUSTOM_PROVIDER,
+	FULLY_REDACTED_KEYS,
 	type AuthKeyInfo,
 	type AuthKeyStatus,
 	genericProviderKeyGuard,
@@ -164,7 +165,7 @@ export function resolveKeyStatuses(
 			present: live !== undefined,
 			// Custom keys may be one character: even a masked suffix can expose
 			// the entire credential. Preserve inventory, return no key characters.
-			masked: live !== undefined ? id === CUSTOM_PROVIDER.envVar ? "••••" : `${maskKey(live)} (${live.trim().length} chars)` : null,
+			masked: live !== undefined ? id === CUSTOM_PROVIDER.envVar || FULLY_REDACTED_KEYS.has(id) ? "••••" : `${maskKey(live)} (${live.trim().length} chars)` : null,
 			source: isRealEnv ? "env" : live !== undefined ? "file" : "none",
 			shadowedByEnv: isRealEnv && fileValue !== undefined && envValue !== fileValue,
 		});

@@ -48,6 +48,18 @@ export const AUTH_KEYS: readonly AuthKeyInfo[] = [
 		description: "Web-search engine for the researcher sub-agent — the alternative to Tavily. Setting the key activates it.",
 		docsUrl: "https://brave.com/search/api/",
 	},
+	{
+		id: "SEARXNG_URL",
+		label: "SearXNG URL",
+		description: "Base URL of your own SearXNG instance (http or https, e.g. https://search.example.org) — a self-hosted web-search engine for the researcher. The instance must allow JSON output. Setting the URL activates it.",
+		docsUrl: "https://docs.searxng.org/admin/settings/settings_search.html",
+	},
+	{
+		id: "SEARXNG_AUTH_HEADER",
+		label: "SearXNG Authorization header",
+		description: "Optional: the full Authorization header value for a SearXNG instance behind basic auth (e.g. \"Basic dXNlcjpwYXNz\"). Never shown again after saving.",
+		docsUrl: "https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/Authorization",
+	},
 ] as const;
 
 const AUTH_KEY_IDS: ReadonlySet<string> = new Set(AUTH_KEYS.map((k) => k.id));
@@ -154,7 +166,9 @@ export type KeyShapeResult = { ok: true } | { ok: false; error: string };
  * TRIMMED first (paste hygiene); empty-after-trim always fails.
  *
  * CURATED keys carry family rules (Tavily's tvly-… prefix; Brave and
- * Deepgram publish no format — length floors + paste hygiene only).
+ * Deepgram publish no format — length floors + paste hygiene only;
+ * SEARXNG_URL must be an http(s) base URL without credentials/query/
+ * fragment; the SearXNG auth header is any single-line value).
  * MODEL-PROVIDER keys use genericProviderKeyGuard below instead (families
  * vary by provider — only paste hygiene applies; owner spec: min length
  * ~12, no whitespace). OPENROUTER_API_KEY moved to the generic guard with
@@ -174,6 +188,15 @@ export function validateKeyShape(id: string, rawValue: string): KeyShapeResult {
 		case "BRAVE_API_KEY":
 			// No public format — a length floor + paste hygiene only.
 			return nonEmpty(20);
+		case "SEARXNG_URL":
+			return isSearxngBaseUrl(value)
+				? { ok: true }
+				: { ok: false, error: `${id} must be an http(s) base URL without credentials, query or fragment` };
+		case "SEARXNG_AUTH_HEADER":
+			// "Basic …" / "Bearer …" contain one space: single line, non-empty.
+			return value.length > 0 && !/[\r\n]/.test(value)
+				? { ok: true }
+				: { ok: false, error: `${id} must be a single-line Authorization header value` };
 		case "DEEPGRAM_API_KEY":
 			// No public format — the length floor only catches truncated pastes.
 			return nonEmpty(20);
@@ -181,6 +204,20 @@ export function validateKeyShape(id: string, rawValue: string): KeyShapeResult {
 			return { ok: false, error: `unknown key "${id}" (supported: ${[...AUTH_KEY_IDS].join(", ")})` };
 	}
 }
+
+/** SEARXNG_URL's shape (browser-safe twin of server/search.ts's parser). */
+export function isSearxngBaseUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password && !url.search && !url.hash;
+	} catch {
+		return false;
+	}
+}
+
+/** Keys whose value never leaves the server in any form — not even a
+ *  masked tail (the inventory shows "••••"). */
+export const FULLY_REDACTED_KEYS: ReadonlySet<string> = new Set(["SEARXNG_AUTH_HEADER"]);
 
 /** The generic truncation guard for MODEL-PROVIDER keys (families vary —
  *  only paste hygiene applies; owner spec: trim, no whitespace, min 12). */

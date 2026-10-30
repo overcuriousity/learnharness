@@ -1,18 +1,27 @@
+import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
+import { AUTH_FILE, PATHS } from "../../../config.ts";
 
 /**
- * Shared plumbing for the learner-filesystem tools (ls / find / grep) —
- * sources v1 (2026-09-19): the agent locates and reads the learner's files
- * itself, so paths need no UI affordance (user decision: no attachments —
- * the learner references files in messages; the agent finds them).
+ * Shared plumbing for the learner-filesystem tools (read / ls / find /
+ * grep / the pdf reader) — sources v1 (2026-09-19): the agent locates and
+ * reads the learner's files itself.
  *
- * Safety posture (user-locked): READ-ONLY by construction — no shell-out,
- * no user-controlled process args, no mutation APIs anywhere here. The one
- * deliberate scope widening vs pi: relative paths and default roots resolve
- * against the LEARNER'S HOME, not a project cwd — the harness has no
- * meaningful working directory, and "find my notes" should just work.
+ * Safety posture: READ-ONLY by construction — no shell-out, no
+ * user-controlled process args, no mutation APIs anywhere here.
+ *
+ * THE LIBRARY SANDBOX (server fork): every path resolves inside
+ * LH_LIBRARY_DIR and nowhere else. Relative paths and the default root
+ * resolve against the library; absolute paths are accepted only when they
+ * land inside it. Symlinks are followed with realpath and the RESULT must
+ * stay inside the library; the data folder (LH_DATA_DIR) and the whole
+ * folder holding LH_AUTH_FILE (API keys + subscription credentials) are
+ * always refused. Unset or misconfigured (not an absolute directory, or
+ * overlapping the data/auth folders) → the tools are not registered at
+ * all (libraryRoot() === null) and resolution refuses as a second line.
+ * Tree walks never follow symlinks (walkFiles), so they cannot leave the
+ * library either.
  *
  * Ported behaviors (mirroring pi's dist/core/tools/{ls,find,grep}.js): the
  * schemas, descriptions, output formats, and truncation notices are copied
@@ -35,12 +44,111 @@ export const WALK_TIMEOUT_MS = 10_000;
  */
 const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git", "Library", ".Trash"]);
 
-/** Resolve a tool path argument: absolute stays, relative/absent → home.
- *  (pi resolves against the project cwd; the harness's "project" is the
- *  learner's life, so the home directory is the anchor.) */
-export function resolveSourcePath(p?: string): string {
-	if (!p) return os.homedir();
-	return path.isAbsolute(p) ? p : path.join(os.homedir(), p);
+/** The shared prompt segment that describes the learner's files — composed
+ *  only when the library (and so the file tools) is available. */
+export const LEARNER_FILES_SEGMENT = "shared/30-learner-files.md";
+
+export interface LibraryRoot {
+	/** LH_LIBRARY_DIR as configured (absolute, normalized) — for messages. */
+	configured: string;
+	/** Its realpath — the containment boundary. */
+	real: string;
+}
+
+/** `child` equals `parent` or lies below it (both absolute, normalized). */
+export function isInside(child: string, parent: string): boolean {
+	return child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
+}
+
+/** realpath of the nearest existing ancestor + the not-yet-existing rest:
+ *  a missing file still resolves to where it WOULD be, symlinks included. */
+function realpathNearestSync(target: string): string {
+	let current = path.resolve(target);
+	const rest: string[] = [];
+	for (;;) {
+		try {
+			return path.join(fsSync.realpathSync(current), ...rest);
+		} catch {
+			const parent = path.dirname(current);
+			if (parent === current) return path.join(current, ...rest);
+			rest.unshift(path.basename(current));
+			current = parent;
+		}
+	}
+}
+
+async function realpathNearest(target: string): Promise<string> {
+	let current = path.resolve(target);
+	const rest: string[] = [];
+	for (;;) {
+		try {
+			return path.join(await fs.realpath(current), ...rest);
+		} catch {
+			const parent = path.dirname(current);
+			if (parent === current) return path.join(current, ...rest);
+			rest.unshift(path.basename(current));
+			current = parent;
+		}
+	}
+}
+
+/** The folders no file tool may ever read: the data folder and the folder
+ *  holding the auth file (keys + subscription credential files). */
+export function protectedRoots(): string[] {
+	return [PATHS.data, path.dirname(AUTH_FILE)].map(realpathNearestSync);
+}
+
+const reportedProblems = new Set<string>();
+
+/** The configured library, or null when unset/misconfigured (the file tools
+ *  are then not registered). A misconfiguration is logged once. */
+export function libraryRoot(env: Record<string, string | undefined> = process.env): LibraryRoot | null {
+	const configured = env.LH_LIBRARY_DIR;
+	if (!configured) return null;
+	let problem: string | null = null;
+	let real = "";
+	if (!path.isAbsolute(configured)) {
+		problem = "must be an absolute path";
+	} else {
+		try {
+			real = fsSync.realpathSync(configured);
+			if (!fsSync.statSync(real).isDirectory()) problem = "is not a directory";
+		} catch {
+			problem = "does not exist";
+		}
+	}
+	if (!problem) {
+		for (const root of protectedRoots()) {
+			if (isInside(real, root) || isInside(root, real)) {
+				problem = `overlaps a protected folder (${root})`;
+				break;
+			}
+		}
+	}
+	if (problem) {
+		if (!reportedProblems.has(problem)) {
+			reportedProblems.add(problem);
+			console.error(`[library] LH_LIBRARY_DIR ${problem} — the file tools are disabled.`);
+		}
+		return null;
+	}
+	return { configured: path.resolve(configured), real };
+}
+
+/** Resolve a tool path argument INSIDE the library (see the sandbox note
+ *  above). Throws a model-readable error for anything outside it. */
+export async function resolveLibraryPath(p?: string): Promise<string> {
+	const root = libraryRoot();
+	if (!root) throw new Error("No library folder is configured (LH_LIBRARY_DIR) — file tools are unavailable.");
+	const requested = !p ? root.real : path.isAbsolute(p) ? path.resolve(p) : path.resolve(root.real, p);
+	const real = await realpathNearest(requested);
+	if (!isInside(real, root.real)) {
+		throw new Error(`Path is outside the library folder (${root.configured}): ${p}`);
+	}
+	for (const blocked of protectedRoots()) {
+		if (isInside(real, blocked)) throw new Error(`Path is not readable: ${p}`);
+	}
+	return real;
 }
 
 /** pi's formatSize idiom (50KB prints as "50.0KB"). */

@@ -3,7 +3,7 @@ import { Type } from "typebox";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { serverExecute, type ImageFileResult } from "../tool-execute.ts";
-import { resolveSourcePath } from "./fs-shared.ts";
+import { resolveLibraryPath } from "./fs-shared.ts";
 import { detectSupportedImageMimeTypeFromFile, processImage } from "../image-processing/index.ts";
 
 /**
@@ -82,14 +82,14 @@ function readTextSlice(text: string, offset: number | undefined, limit: number |
  * The read tool, shared verbatim by the prober and the teacher. Sources v1
  * (2026-09-19): the description is pi-verbatim (user: copy tool usage
  * guidance exactly) — the teaching doctrine moved to the shared prompt
- * fragment (prompts/shared/). Relative paths resolve against the
- * learner's home (fs-shared.ts), the harness's anchor.
+ * fragment (prompts/shared/). Paths resolve inside the library folder
+ * (fs-shared.ts) — nothing outside it is readable.
  */
 export type ReadModel = Pick<Model<Api>, "input" | "inputLimits">;
 
 /** One implementation for every learner-file reader. Bind the active model
  * per agent, rather than sharing mutable model state between conversations.
- * Home-relative paths, text slicing and the app's abort guard stay unchanged;
+ * Library-relative paths, text slicing and the app's abort guard stay unchanged;
  * image detection/processing and its notes follow native Pi read behavior. */
 export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 	return {
@@ -98,7 +98,7 @@ export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 		description: `Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50.0KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
 		parameters: readInput,
 		execute: serverExecute("read", readInput, async ({ path: rawPath, offset, limit }, { signal }): Promise<string | ImageFileResult> => {
-			const absolute = resolveSourcePath(rawPath);
+			const absolute = await resolveLibraryPath(rawPath);
 			const mime = await detectSupportedImageMimeTypeFromFile(absolute);
 			const buffer = await fs.readFile(absolute, { signal });
 			if (mime) {

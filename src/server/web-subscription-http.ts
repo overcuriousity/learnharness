@@ -1,11 +1,37 @@
 import { NATIVE_SUBSCRIPTIONS } from "../core/contracts/subscriptions.ts";
+import { serverMode } from "../core/server-mode.ts";
 import { webSubscriptionOwner, webSubscriptionsEnabled, webSubscriptionStatus } from "./web-subscriptions.ts";
 
 const HEADERS = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
+/** LH_PUBLIC_ORIGIN (server fork): behind a TLS-terminating proxy the app sees
+ * http: while the browser sends Origin: https://…, so the addressed origin
+ * cannot be derived from the request. When set, this exact origin (scheme,
+ * host, optional port — nothing else) is the ONLY accepted one. Invalid =
+ * undefined, which every caller treats as "refuse". */
+export function configuredPublicOrigin(value: string | undefined = process.env.LH_PUBLIC_ORIGIN): string | undefined {
+	if (!value) return;
+	try {
+		const url = new URL(value);
+		if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) return;
+		// Reject anything URL() normalized away (a path, a trailing junk char).
+		if (value.replace(/\/$/, "") !== url.origin) return;
+		return url.origin;
+	} catch { return; }
+}
+let reportedBadOrigin = false;
+
 /** Same-origin browser controls, not user authentication. Web/dev deliberately
  * retains the existing shared-server/API-key trust model. Never trust forwarded
  * origins or add CORS grants here. A public deployment needs its own access gate. */
 export function subscriptionRequestOrigin(request: Request): string | undefined {
+	if (process.env.LH_PUBLIC_ORIGIN) {
+		const configured = configuredPublicOrigin();
+		if (!configured && !reportedBadOrigin) {
+			reportedBadOrigin = true;
+			console.error("[origin] LH_PUBLIC_ORIGIN is not a bare http(s) origin (e.g. https://learn.example.org) — same-origin controls refuse every request.");
+		}
+		return configured;
+	}
 	try {
 		const url = new URL(request.url);
 		const host = request.headers.get("host") ?? url.host;
@@ -47,6 +73,7 @@ export async function subscriptionControlsResponse(request: Request): Promise<Re
 		const fields = command as Record<string, unknown>;
 		const providerId = fields.providerId;
 		if (providerId !== "chatgpt" && !NATIVE_SUBSCRIPTIONS.some((provider) => provider.providerId === providerId)) return error("Unsupported connection.", 400);
+		if (providerId === "chatgpt" && serverMode()) return error("Not found.", 404);
 		const allowed = providerId === "chatgpt" ? ["login", "cancel", "select", "disconnect", "logout", "consent"] : ["login", "cancel", "respond", "open", "retry", "disconnect", "consent"];
 		if (typeof fields.op !== "string" || !allowed.includes(fields.op)) return error("Unsupported control.", 400);
 		return Response.json(await webSubscriptionOwner().control(providerId as string, fields, subscriptionRequestOrigin(request)!), { headers: HEADERS });

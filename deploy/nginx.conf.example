@@ -1,0 +1,54 @@
+# LearnHarness behind nginx — example server block. See docs/server-deployment.md.
+#
+# Access control: none here, by design — this example assumes the host is
+# reachable only from a protected internal network. If that is not true, add
+# authentication (e.g. the commented auth_basic lines below) before exposing it.
+
+server {
+    listen 80;
+    server_name learn.example.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name learn.example.org;
+
+    ssl_certificate     /etc/ssl/learnharness/fullchain.pem;
+    ssl_certificate_key /etc/ssl/learnharness/privkey.pem;
+
+    # Library uploads and notes import: 25 MB per request (the app's limit).
+    client_max_body_size 25m;
+
+    # Security headers. No Content-Security-Policy: demos are agent-written
+    # HTML with inline scripts (and optional CDN libraries) rendered in a
+    # srcdoc iframe that inherits the page's policy.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Frame-Options "DENY" always;
+    # Enable once HTTPS is permanent for this host name:
+    # add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Optional: basic authentication.
+    # auth_basic "LearnHarness";
+    # auth_basic_user_file /etc/nginx/learnharness.htpasswd;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+    }
+
+    # API routes stream (SSE) and a teaching turn or research job can run for
+    # many minutes. The app sends X-Accel-Buffering: no on its streams.
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}

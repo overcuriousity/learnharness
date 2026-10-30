@@ -20,10 +20,11 @@ import { runPdfReaderAgent } from "../src/agent/subagents/pdf-reader.ts";
 import type { HeadlessApi } from "../src/agent/subagents/headless.ts";
 import { AUTH_PROVIDER_KEYS } from "../src/core/auth-keys.ts";
 import { providerEventsDir } from "../src/agent/provider-events.ts";
+import { libraryCopy, TEST_LIBRARY } from "./helpers/library.ts";
 
 const OR_KEY = "dummy-openrouter-MUST-NOT-REACH-other-endpoints";
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="white"/></svg>';
-const FIXTURE = path.join(import.meta.dirname, "fixtures", "sample-3page.pdf");
+const FIXTURE = libraryCopy(path.join(import.meta.dirname, "fixtures", "sample-3page.pdf"));
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==", "base64");
 const FINAL = "Verified offline output (p. 1). Pages consulted: 1";
 const LOOPS = ["visual", "pdf"] as const;
@@ -55,7 +56,7 @@ async function isolated<T>(env: Record<string, string>, run: () => Promise<T>): 
 	const eventsDir = mkdtempSync(path.join(tmpdir(), "lh-provider-neutral-"));
 	providerEventsDir.current = eventsDir;
 	globalThis.fetch = async () => { throw new Error("CLOSED: unexpected fetch"); };
-	process.env = { NODE_ENV: "test", HOME: "/nonexistent/provider-neutral-test-home", ...env };
+	process.env = { NODE_ENV: "test", HOME: "/nonexistent/provider-neutral-test-home", LH_LIBRARY_DIR: TEST_LIBRARY, ...env };
 	try {
 		return await run();
 	} finally {

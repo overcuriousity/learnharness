@@ -1,17 +1,26 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Source_Sans_3 } from "next/font/google";
+import localFont from "next/font/local";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { AppShell, SidebarProvider } from "@/components/sidebar";
 import { ActivityProvider } from "@/components/activity-dock";
 import { ServerEventsProvider } from "@/components/server-events";
 import { AppearanceProvider } from "@/components/settings/appearance";
-import UpdateBanner from "@/components/update-banner";
 
 // Chrome = JetBrains Mono, teaching prose = Source Sans 3, titles = CMU
-// Serif (the bundled lh-cmu @font-face in globals.css — no CDN).
-const ui = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
-const prose = Source_Sans_3({ subsets: ["latin"], variable: "--font-sans3" });
+// Serif (the bundled lh-cmu @font-face in globals.css — no CDN). All three
+// are committed under public/fonts (OFL; latin variable subsets from
+// Fontsource 5.3.x) so the build never downloads from Google Fonts.
+const ui = localFont({
+	src: "../public/fonts/jetbrains-mono-latin-wght-normal.woff2",
+	weight: "100 800",
+	variable: "--font-jetbrains",
+});
+const prose = localFont({
+	src: "../public/fonts/source-sans-3-latin-wght-normal.woff2",
+	weight: "200 900",
+	variable: "--font-sans3",
+});
 
 export const metadata: Metadata = {
 	title: "Learning Harness",
@@ -33,8 +42,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 					</SidebarProvider>
 				</AppearanceProvider>
 			</ServerEventsProvider>
-			{/* Auto-update banner (Wave C): fixed card, Electron-only pushes. */}
-			<UpdateBanner />
 		</body>
 		</html>
 	);

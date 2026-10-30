@@ -332,6 +332,10 @@ export function ChatGPTConnection({ labelClassName }: { setup?: boolean; labelCl
 	const ui = useContext(Context);
 	const active = ui.status.accounts.find((a) => a.id === ui.status.activeId && a.connected);
 	const accounts = ui.status.accounts.filter((a) => a.connected);
+	// Server mode (LH_SERVER_MODE=1): no connection row, one line of why.
+	if (ui.status.serverUnavailable) {
+		return <p className="text-xs text-muted-foreground" data-testid="chatgpt-server-mode">{ui.status.serverUnavailable}</p>;
+	}
 	return <div className="flex flex-col gap-2" data-testid="chatgpt-connection">
 		<ConnectionRow label="ChatGPT" labelClassName={labelClassName} actionTestid={active ? undefined : "chatgpt-login"} action={active ? "Manage…" : "Connect"} disabled={!ui.status.available || ui.busy || ui.status.pending} onAction={() => active ? ui.manage(active.id) : ui.connect()}>
 			{active && <select aria-label="ChatGPT account" value={active.id} disabled={ui.busy || ui.status.pending} onChange={(event) => ui.select(event.target.value)} className="min-w-0 rounded-sm border border-border bg-background px-2 py-1 text-xs text-foreground">

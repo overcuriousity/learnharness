@@ -189,7 +189,7 @@ flowchart LR
         LLM["LLM engines — pi-ai/OpenRouter via piEngineFor"]
         HEAD["headless Chrome — demo verify · SVG render"]
         DEEP["Deepgram STT — token-minting route, browser-side WebSocket"]
-        WEB["web tools — Google CSE + Readability/Jina (researcher)"]
+        WEB["web tools — Tavily/Brave/SearXNG + Readability (researcher)"]
     end
 
     BROWSER --> HTTP
@@ -413,7 +413,7 @@ flowchart LR
     subgraph OUTSIDE["outside the process"]
         OR["OpenRouter (BYOK key from auth.json, env-injected — never argv)"]
         DG["Deepgram STT (browser-direct WebSocket)"]
-        GCSE["Google CSE / Jina (researcher tools)"]
+        GCSE["Tavily / Brave / SearXNG (researcher tools)"]
         CHROME["system Chrome (headless: demo verify · SVG render)"]
         DISK["data/ ledgers (via LH_DATA_DIR seam)"]
     end

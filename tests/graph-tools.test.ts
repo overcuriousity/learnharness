@@ -16,6 +16,7 @@ import { auditorGraphTools } from "../src/agent/tools/graph.ts";
 import type { ChatStore, GraphStore, JobStore } from "../src/core/ports.ts";
 import type { ChatSummary } from "../src/core/contracts/chat.ts";
 import type { GraphChain, GraphNode } from "../src/core/contracts/graph.ts";
+import { TEST_LIBRARY } from "./helpers/library.ts";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 

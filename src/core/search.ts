@@ -30,8 +30,9 @@ export interface SearchHit {
 	snippet: string;
 }
 
-/** The engine ids this wave ships (the catalog: curated keys + adapters). */
-export type SearchEngineId = "tavily" | "brave";
+/** The engine ids this build ships (the catalog: curated keys + adapters).
+ *  SearXNG (server fork) is keyed by its base URL, SEARXNG_URL. */
+export type SearchEngineId = "tavily" | "brave" | "searxng";
 
 /** A live search engine: an id (for status/labels) + one operation. The
  *  adapters own their wire protocol (fetch, timeouts, error mapping) —

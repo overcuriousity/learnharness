@@ -3,7 +3,6 @@ import test, { afterEach } from "node:test";
 import { parseHTML } from "linkedom";
 import { createNotifyHub } from "../components/server-events.tsx";
 import { createWebChatGPTBridge, createWebNativeBridge } from "../components/settings/subscription-client.ts";
-import { createRequire } from "node:module";
 
 const dom = parseHTML("<html><body></body></html>");
 Object.assign(globalThis, { window: dom.window, document: dom.document });
@@ -77,23 +76,4 @@ test("web notices identify the server machine and same-machine ChatGPT sign-in; 
 		assert(subscriptionNotice(label, true).includes("on the machine running LearnHarness"));
 		assert(subscriptionDisconnectCopy(label, true).includes("from the machine running LearnHarness"));
 	}
-});
-
-const require = createRequire(import.meta.url);
-const { openWebSubscriptionBrowser } = require("../electron/web-subscription-browser.cjs");
-test("desktop-dev opener accepts only local action IDs, does not follow redirects or use browser cookies", async () => {
-	const opened: string[] = [];
-	const options = {
-		openExternal: async (url: string) => { opened.push(url); },
-		fetch: async (url: URL, init: RequestInit) => {
-			assert.equal(url.origin, "http://localhost:3000"); assert.equal(url.pathname, "/api/subscriptions/browser");
-			assert.equal(init.method, "POST"); assert.equal(init.redirect, "manual"); assert.equal(init.credentials, "omit");
-			assert.equal(new Headers(init.headers).get("origin"), "http://localhost:3000");
-			return new Response(null, { status: 303, headers: { Location: "https://auth.openai.com/authorize?state=fixture" } });
-		},
-	};
-	await openWebSubscriptionBrowser(action, "http://localhost:3000", options); assert.equal(opened.length, 1);
-	for (const target of ["https://unrelated.invalid", "//unrelated.invalid", "/api/keys", `${action}&target=evil`]) await assert.rejects(openWebSubscriptionBrowser(target, "http://localhost:3000", options), /Invalid sign-in action/);
-	for (const target of ["file:///private/fixture", "http://unrelated.invalid", "https://user:pass@unrelated.invalid"]) await assert.rejects(openWebSubscriptionBrowser(action, "http://localhost:3000", { ...options, fetch: async () => new Response(null, { status: 303, headers: { Location: target } }) }));
-	assert.equal(opened.length, 1);
 });

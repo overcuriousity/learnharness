@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Loader2Icon, MicIcon } from "lucide-react";
 import { useSettingsDialog } from "@/components/settings/settings-dialog";
 import { Hint } from "@/components/ui/hint";
 import { deepgramListenUrl, type DictationLanguage } from "@/src/core";
 import { useDictationLanguage } from "@/components/dictation-preference";
 import { setDictationActive } from "@/components/dictation-state";
+import { onSettingsSaved } from "@/components/settings-signal";
 export { isDictationActive } from "@/components/dictation-state";
 
 /**
@@ -131,8 +132,8 @@ async function mintFreshToken(): Promise<string> {
  *  from going stale (self-heal anyway: a rejected handshake rides the
  *  reconnect-once path with a FRESH mint); a failed mint resets the cache
  *  so the next call re-mints — the honest error path stays honest.
- *  refresh() re-mints in the background (page mount, run end); its
- *  failures are silently tolerated (a keyless pre-mint just doesn't warm). */
+ *  refresh() is NOT called in the background (server fork): every mint is
+ *  a call to Deepgram, which must happen only when the user dictates. */
 export const WARM_TOKEN_TTL_MS = 3 * 60_000;
 
 export type WarmMinter = { mint: () => Promise<string>; refresh: () => void };
@@ -163,6 +164,53 @@ export function createWarmMinter(
 }
 
 const warmTokens = createWarmMinter(mintFreshToken);
+
+/* Is a Deepgram key configured? Read from the same-origin key inventory
+ * (GET /api/keys — presence only, never the value, never a Deepgram call)
+ * and refreshed whenever the Keys section saves. Unconfigured = the
+ * dictation surface does not render at all. */
+let configured = false;
+let configuredLoaded = false;
+const configuredListeners = new Set<() => void>();
+
+async function loadDictationConfigured(): Promise<void> {
+	try {
+		const res = await fetch("/api/keys");
+		const body = (await res.json()) as { keys?: Array<{ id: string; present: boolean }> };
+		configured = body.keys?.some((k) => k.id === DEEPGRAM_KEY_ID && k.present) === true;
+	} catch {
+		configured = false;
+	}
+	for (const listener of configuredListeners) listener();
+}
+
+let stopConfiguredSignal: (() => void) | undefined;
+
+function subscribeConfigured(listener: () => void): () => void {
+	configuredListeners.add(listener);
+	if (configuredListeners.size === 1) {
+		stopConfiguredSignal = onSettingsSaved((section) => { if (section === "keys") void loadDictationConfigured(); });
+		if (!configuredLoaded) {
+			configuredLoaded = true;
+			void loadDictationConfigured();
+		}
+	}
+	return () => {
+		configuredListeners.delete(listener);
+		if (configuredListeners.size === 0) {
+			stopConfiguredSignal?.();
+			stopConfiguredSignal = undefined;
+		}
+	};
+}
+
+export function dictationConfigured(): boolean {
+	return configured;
+}
+
+export function useDictationConfigured(): boolean {
+	return useSyncExternalStore(subscribeConfigured, dictationConfigured, () => false);
+}
 
 /* Persistent capture graph (mitigation C, owner 2026-09-27): one
  * app-lifetime AudioContext + a module-load memo. Created under the
@@ -332,7 +380,7 @@ export function useDictation({ append }: { append: (text: string) => void }): Di
 	}, []);
 
 	/** Full teardown of one run's machinery. Idempotent; generation-guarded by callers. */
-	const cleanup = useCallback((warmNext = true) => {
+	const cleanup = useCallback(() => {
 		genRef.current++;
 		setDictationActive(false);
 		flush(); // the deferred transcript appears when the run ends (owner round 2)
@@ -360,9 +408,6 @@ export function useDictation({ append }: { append: (text: string) => void }): Di
 		// a submit path resuming after `await finishDictation()` reads the
 		// target field with the dictated tail already in it.
 		for (const w of waitersRef.current.splice(0)) w();
-		// Pre-mint for the next run (mitigation D) — best-effort; a keyless
-		// page just doesn't warm.
-		if (warmNext) warmTokens.refresh();
 	}, []);
 
 	/** Open the Deepgram socket and wire its messages. `gen` guards staleness. */
@@ -600,17 +645,18 @@ export function useDictation({ append }: { append: (text: string) => void }): Di
 	// page owns ONE hook instance, and only the mounted page's listener is
 	// attached.
 	useEffect(() => {
-		warmTokens.refresh(); // pre-mint at mount (mitigation D) — silent if keyless
 		return () => {
 			// Navigation cancels capture: invalidate every pending await before
 			// releasing resources, and never append into a different page's input.
 			bufferRef.current = [];
-			cleanup(false);
+			cleanup();
 		};
 	}, [cleanup]);
 	useEffect(() => {
-		window.addEventListener("lh:kbd-toggle-dictation", toggle);
-		return () => window.removeEventListener("lh:kbd-toggle-dictation", toggle);
+		// No Deepgram key → no dictation surface, so ⌘D does nothing either.
+		const onToggle = () => { if (dictationConfigured()) toggle(); };
+		window.addEventListener("lh:kbd-toggle-dictation", onToggle);
+		return () => window.removeEventListener("lh:kbd-toggle-dictation", onToggle);
 	}, [toggle]);
 	useEffect(() => {
 		window.addEventListener("lh:kbd-cancel-dictation", cancel);
@@ -656,6 +702,7 @@ export function DictationBar({ dictation }: { dictation: Dictation }) {
 	 *  overflowing under neighbors. */
 	const [cellCount, setCellCount] = useState(METER_CELLS);
 	const meterRef = useRef<HTMLDivElement | null>(null);
+	const isConfigured = useDictationConfigured();
 
 	// The meter's own heartbeat — 60ms samples of the level ref into a
 	// rolling ring. Only THIS strip re-renders; the page never does.
@@ -690,6 +737,8 @@ export function DictationBar({ dictation }: { dictation: Dictation }) {
 		ro.observe(el);
 		return () => ro.disconnect();
 	}, [active]);
+
+	if (!active && !isConfigured) return null;
 
 	if (!active) {
 		return (

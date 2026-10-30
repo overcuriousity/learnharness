@@ -8,7 +8,7 @@ import {
 	formatSize,
 	MAX_OUTPUT_BYTES,
 	matchGlob,
-	resolveSourcePath,
+	resolveLibraryPath,
 	walkFiles,
 } from "./fs-shared.ts";
 
@@ -29,7 +29,7 @@ const findInput = Type.Object({
 		minLength: 1,
 		description: "Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'",
 	}),
-	path: Type.Optional(Type.String({ description: "Directory to search in (default: the learner's home directory)" })),
+	path: Type.Optional(Type.String({ description: "Directory to search in (default: the library folder)" })),
 	limit: Type.Optional(Type.Integer({ description: "Maximum number of results (default: 1000)" })),
 });
 
@@ -40,7 +40,7 @@ export const findTool: AgentTool<typeof findInput> = {
 	parameters: findInput,
 	execute: serverExecute("find", findInput, async (input, ctx) => {
 		if (ctx?.signal?.aborted) return "Operation aborted";
-		const searchPath = resolveSourcePath(input.path);
+		const searchPath = await resolveLibraryPath(input.path);
 		let stat;
 		try {
 			stat = await fs.stat(searchPath);
