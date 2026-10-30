@@ -53,6 +53,8 @@ export interface ProviderKeyInfo {
 interface KeysResponse {
 	keys: AuthKeyStatus[];
 	providers?: ProviderKeyInfo[];
+	/** LH_SERVER_MODE=1: the Claude Code (External CLI) group is hidden. */
+	serverMode?: boolean;
 }
 
 /** The custom endpoint's non-secret status (GET /api/custom-provider). */
@@ -376,6 +378,8 @@ export function KeysSection({
 	initialRow?: string;
 }) {
 	const [statuses, setStatuses] = useState<AuthKeyStatus[] | null>(null);
+	/** Unknown until /api/keys answers: the External CLI group waits for it. */
+	const [serverMode, setServerMode] = useState<boolean | null>(null);
 	const [providers, setProviders] = useState<ProviderKeyInfo[] | undefined>(undefined);
 	const [loading, setLoading] = useState(true);
 	/** The unfolded row (its id), null = all folded. Seeded by the
@@ -414,6 +418,7 @@ export function KeysSection({
 			const body = (await fetch("/api/keys").then((r) => r.json())) as KeysResponse;
 			setStatuses(body.keys ?? []);
 			if (body.providers) setProviders(body.providers);
+			setServerMode(body.serverMode === true);
 		} catch {
 			setStatuses([]);
 		} finally {
@@ -575,9 +580,9 @@ export function KeysSection({
 				<SubscriptionConnections />
 			</SettingsGroup>
 
-			<SettingsGroup label="External CLI" testid="group-external-cli">
+			{serverMode === false && <SettingsGroup label="External CLI" testid="group-external-cli">
 				<ClaudeCodeInstallationStatus />
-			</SettingsGroup>
+			</SettingsGroup>}
 
 			{(["Dictation", "Search"] as const).map((label) => <SettingsGroup key={label} label={label} testid={label === "Dictation" ? "group-dictation" : "group-search"}>
 				{toolRows.filter((status) => label === "Dictation" ? status.id === "DEEPGRAM_API_KEY" : status.id !== "DEEPGRAM_API_KEY").map((status) => (

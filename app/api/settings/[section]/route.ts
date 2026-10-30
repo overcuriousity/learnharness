@@ -39,6 +39,7 @@ import {
 	effectiveSettings,
 	promptOverrides,
 	readSettingsRecord,
+	serverMode,
 	validateChatSettings,
 	validateModelsSettings,
 	writeSettingsRecord,
@@ -52,6 +53,8 @@ type AnySectionParser = (body: unknown) => SettingsBodyResult<unknown>;
 
 export async function PUT(request: Request, ctx: { params: Promise<{ section: string }> }) {
 	const { section } = await ctx.params;
+	// Server mode: Claude Code does not exist here (src/core/server-mode.ts).
+	if (section === "claudeCode" && serverMode()) return Response.json({ error: "Not found." }, { status: 404 });
 	const parser = (SETTINGS_SECTIONS as Record<string, AnySectionParser>)[section];
 	if (!parser) {
 		return Response.json(

@@ -1,9 +1,12 @@
 import { getClaudeBinary } from "../agent/claude-code/binary.ts";
 import { settingsStore } from "../store/settings.ts";
+import { serverMode } from "../core/server-mode.ts";
 
 /** Fresh admission state, not a process-wide cache. Existing runs retain
  * their engines; only new chat/job/extraction/compaction admissions consult it. */
 export function claudeCodeEnabled(): boolean {
+	// Server mode: the CLI would run with the service user's credentials.
+	if (serverMode()) return false;
 	return settingsStore.readSettings()?.claudeCode?.enabled === true;
 }
 
