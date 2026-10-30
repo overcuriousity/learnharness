@@ -14,9 +14,9 @@ import TurndownService from "turndown";
  * pi extensions (~/.pi/agent/extensions/web-search + web-fetch):
  *
  *   web_search(query, count?) → {title, url, snippet}[]   (injected search port)
- *   web_fetch(url)            → readable markdown text     (Readability + Turndown,
- *                                                          Jina Reader fallback for
- *                                                          JS-rendered pages)
+ *   web_fetch(url)            → readable markdown text     (Readability + Turndown;
+ *                                                          JS-rendered pages fail
+ *                                                          with a clear error)
  *
  * SEARCH REWIRING (search port wave, 2026-09-20): the Google CSE backend is
  * retired — web_search now runs on the injected search port (core/search.ts).
@@ -49,26 +49,6 @@ const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fen
 function truncate(text: string): string {
 	if (text.length <= MAX_CONTENT_CHARS) return text;
 	return `${text.slice(0, MAX_CONTENT_CHARS)}\n\n[Truncated at ${MAX_CONTENT_CHARS} characters]`;
-}
-
-/** Jina Reader fallback for JS-rendered pages (no deps — plain fetch). */
-async function fetchViaJina(url: string): Promise<string | null> {
-	try {
-		const res = await fetch(`https://r.jina.ai/${url}`, {
-			headers: { Accept: "text/markdown", "X-No-Cache": "true" },
-			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-		});
-		if (!res.ok) return null;
-		const content = await res.text();
-		const marker = "Markdown Content:";
-		const start = content.indexOf(marker);
-		if (start < 0) return null;
-		const markdown = content.slice(start + marker.length).trim();
-		if (markdown.length < MIN_USEFUL_CONTENT || markdown.startsWith("Loading...")) return null;
-		return markdown;
-	} catch {
-		return null;
-	}
 }
 
 function htmlToMarkdown(html: string): { title: string; content: string } | null {
@@ -116,9 +96,8 @@ async function fetchAndExtract(url: string): Promise<string> {
 		const header = extracted.title ? `# ${extracted.title}\n\n${sourceLine}\n\n---\n\n` : `${sourceLine}\n\n---\n\n`;
 		return header + truncate(extracted.content);
 	}
-	// Readability failed — likely JS-rendered. Try Jina Reader.
-	const jina = await fetchViaJina(url);
-	if (jina) return truncate(jina);
+	// Readability failed — likely JS-rendered. No third-party reader
+	// fallback: the URL is never forwarded to another service.
 	throw new Error("Could not extract readable content (the page may be JavaScript-rendered)");
 }
 
@@ -164,7 +143,7 @@ export function createWebTools(search: () => SearchProvider | null): Record<stri
 			label: "web_fetch",
 			description:
 				"Fetch a web page and extract its readable content as markdown (Readability). " +
-				"Handles HTML pages and plain text; JS-rendered pages fall back to a reader service.",
+				"Handles HTML pages and plain text; JavaScript-rendered pages cannot be extracted.",
 			parameters: webFetchInput,
 			execute: serverExecute("web_fetch", webFetchInput, async ({ url }): Promise<string> => {
 				try {

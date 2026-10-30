@@ -11,9 +11,9 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"dev": "next dev",
-		"build": "next build",
-		"start": "next start",
+		"dev": "NEXT_TELEMETRY_DISABLED=1 next dev",
+		"build": "NEXT_TELEMETRY_DISABLED=1 next build && node scripts/build-server.mjs",
+		"start": "NEXT_TELEMETRY_DISABLED=1 next start",
 		"test": "NODE_ENV=test tsx --test tests/*.test.ts tests/*.test.tsx",
 		"lint": "eslint .",
 		"typecheck": "tsc --noEmit",
