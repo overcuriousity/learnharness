@@ -88,8 +88,8 @@ test("Providers has five ordered sections including External CLI; unknown variab
  assert.deepEqual(headings, ["Model API keys", "Subscriptions", "External CLI", "Dictation", "Search"]);
  assert(byTest("claude-code-installation").closest('[data-testid="group-external-cli"]'));
  assert(byTest("key-deepgram_api_key").closest('[data-testid="group-dictation"]'));
- assert(byTest("key-tavily_api_key").closest('[data-testid="group-search"]'));
- assert(byTest("key-brave_api_key").closest('[data-testid="group-search"]'));
+ assert(byTest("key-searxng_url").closest('[data-testid="group-search"]'));
+ assert(byTest("key-searxng_auth_header").closest('[data-testid="group-search"]'));
  assert(byTest("unknown-FUTURE_VAR").closest('[data-testid="group-provider-keys"]'));
  assert(byTest("group-unknown-keys").parentElement?.lastElementChild === byTest("group-unknown-keys"));
  assert.equal(byTest("unknown-FUTURE_VAR").textContent, "FUTURE_VAR…abcd"); assert(!byTest("unknown-FUTURE_VAR").querySelector("input, button"));

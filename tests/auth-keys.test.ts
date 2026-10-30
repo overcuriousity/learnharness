@@ -1,8 +1,9 @@
 /**
  * The curated auth-key catalog + shape rules (auth-keys wave, 2026-09-19;
- * search wave 2026-09-20: the Google CSE pair retired, Tavily + Brave in)
+ * server fork: the SearXNG pair replaced Tavily + Brave)
  * — PURE module, so this file owns no fs. Owner decisions being pinned:
  *  - the catalog is exactly the three known keys, ids = env-var names;
+ *    (Deepgram + the SearXNG URL/header pair)
  *  - validation is SHAPE-ONLY (no live pings) and bad pastes are 400s;
  *  - masking is last-4 + length — plaintext never leaves the store.
  */
@@ -15,7 +16,7 @@ describe("the catalog", () => {
 	it("is exactly the three CURATED app-service keys (provider keys live in the provider table)", () => {
 		assert.deepEqual(
 			AUTH_KEYS.map((k) => k.id),
-			["DEEPGRAM_API_KEY", "TAVILY_API_KEY", "BRAVE_API_KEY"],
+			["DEEPGRAM_API_KEY", "SEARXNG_URL", "SEARXNG_AUTH_HEADER"],
 		);
 		for (const k of AUTH_KEYS) {
 			assert.ok(k.label.length > 0, `${k.id} has a label`);
@@ -32,8 +33,10 @@ describe("the catalog", () => {
 
 	it("isKnownAuthKey: catalog yes, everything else no", () => {
 		assert.ok(isKnownAuthKey("DEEPGRAM_API_KEY"));
-		assert.ok(isKnownAuthKey("TAVILY_API_KEY"));
-		assert.ok(isKnownAuthKey("BRAVE_API_KEY"));
+		assert.ok(isKnownAuthKey("SEARXNG_URL"));
+		assert.ok(isKnownAuthKey("SEARXNG_AUTH_HEADER"));
+		assert.ok(!isKnownAuthKey("TAVILY_API_KEY"), "retired engine");
+		assert.ok(!isKnownAuthKey("BRAVE_API_KEY"), "retired engine");
 		assert.ok(!isKnownAuthKey("OPENROUTER_API_KEY"));
 		assert.ok(!isKnownAuthKey("OPENAI_API_KEY"), "provider vars are a separate surface");
 		assert.ok(!isKnownAuthKey("FUTURE_PLANS_TOKEN"));
@@ -42,19 +45,6 @@ describe("the catalog", () => {
 });
 
 describe("validateKeyShape (the 400 gate — curated keys)", () => {
-	it("Tavily: tvly- prefix required, length floor past it", () => {
-		assert.ok(validateKeyShape("TAVILY_API_KEY", "tvly-abc123def456ghi78").ok);
-		assert.ok(!validateKeyShape("TAVILY_API_KEY", "sk-or-v1-abcdefghij").ok, "wrong family");
-		assert.ok(!validateKeyShape("TAVILY_API_KEY", "tvly-").ok, "prefix alone is a truncation");
-		assert.ok(!validateKeyShape("TAVILY_API_KEY", "  ").ok, "empty fails");
-	});
-
-	it("Brave: no public format — a ≥20-char truncation guard, no whitespace", () => {
-		assert.ok(validateKeyShape("BRAVE_API_KEY", "b".repeat(40)).ok);
-		assert.ok(!validateKeyShape("BRAVE_API_KEY", "b".repeat(19)).ok, "truncated paste");
-		assert.ok(!validateKeyShape("BRAVE_API_KEY", "has whitespace here").ok);
-	});
-
 	it("Deepgram: no public format — a ≥20-char truncation guard, no whitespace", () => {
 		assert.ok(validateKeyShape("DEEPGRAM_API_KEY", "a".repeat(40)).ok);
 		assert.ok(!validateKeyShape("DEEPGRAM_API_KEY", "a".repeat(19)).ok, "truncated paste");
