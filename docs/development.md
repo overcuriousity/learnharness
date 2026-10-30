@@ -33,7 +33,7 @@ npx tsx --env-file=.env.local scripts/backfill-graph.ts       # wipe + re-extrac
 npx tsx --env-file=.env.local scripts/replay-layout.ts        # re-derive layout from the ledgers
 ```
 
-For Windows/Linux packages and the three-OS CI/release flow, see [`docs/desktop-release.md`](desktop-release.md). Native renderer binaries are traced per platform, so release builds run on the target OS, not as cross-builds from macOS.
+This fork ships no desktop build; to run the standalone server behind nginx, see [`docs/server-deployment.md`](server-deployment.md). Native renderer binaries are traced per platform, so build on the target OS.
 
 ## Environment (`.env.local`)
 

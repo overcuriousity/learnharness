@@ -1,0 +1,57 @@
+# LearnHarness — systemd unit for a single-user server deployment.
+# See docs/server-deployment.md. Install as /etc/systemd/system/learnharness.service
+#
+# EXACTLY ONE INSTANCE. Jobs, compactions and the live-run registry exist only
+# in this process's memory, and the stores rewrite whole JSON files without
+# locking. Never run a second copy (no template unit, no scaling) against the
+# same LH_DATA_DIR / LH_AUTH_FILE.
+
+[Unit]
+Description=LearnHarness (single instance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=learnharness
+Group=learnharness
+# The standalone build output (.next/standalone, copied here by the install).
+WorkingDirectory=/opt/learnharness/app
+ExecStart=/usr/bin/node /opt/learnharness/app/server.js
+Restart=on-failure
+RestartSec=5
+
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=LH_SERVER_MODE=1
+# Absolute paths outside the code folder.
+Environment=LH_DATA_DIR=/var/lib/learnharness/data
+Environment=LH_AUTH_FILE=/var/lib/learnharness/secrets/auth.json
+Environment=LH_LIBRARY_DIR=/srv/learnharness/library
+# The exact origin the browser uses (scheme + host [+ port]), as served by nginx.
+Environment=LH_PUBLIC_ORIGIN=https://learn.example.org
+# Demo verification needs a Chrome/Chromium on the server:
+#Environment=CHROME_PATH=/usr/bin/chromium
+
+# Sandbox
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# Writable: the data folder, the folder holding auth.json (subscription
+# credentials are stored beside it), and the library's uploads/ folder.
+ReadWritePaths=/var/lib/learnharness/data /var/lib/learnharness/secrets /srv/learnharness/library/uploads
+# The rest of the library is read-only for the service.
+ReadOnlyPaths=/srv/learnharness/library
+
+[Install]
+WantedBy=multi-user.target
