@@ -77,9 +77,15 @@ declare global {
 	}
 }
 
-const SidebarContext = createContext<{ open: boolean; toggle: () => void }>({
+/** Phone widths (server fork, owner: overlay drawer): below this the
+ *  sidebar starts closed and opens OVER the page instead of beside it. */
+const MOBILE_QUERY = "(max-width: 767px)";
+
+const SidebarContext = createContext<{ open: boolean; toggle: () => void; mobile: boolean; close: () => void }>({
 	open: false,
 	toggle: () => {},
+	mobile: false,
+	close: () => {},
 });
 
 export function useSidebar() {
@@ -99,6 +105,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	const [open, setOpen] = useState(false);
 	const [narrow, setNarrow] = useState(false);
 	const [mounted, setMounted] = useState(false);
+	const [mobile, setMobile] = useState(false);
 
 	useEffect(() => {
 		// Electron shell detection (merged chrome, 2026-09-17): keys the
@@ -122,8 +129,11 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 		void window.lh?.getZoom?.().then(setZoomVar);
 
 		const stored = localStorage.getItem(STORAGE_KEY);
-		// Default: open (first run introduces the sidebar).
-		setOpen(stored === null ? true : stored === "1");
+		// Default: open (first run introduces the sidebar) — except on a
+		// phone, where the drawer always starts closed.
+		const phone = window.matchMedia?.(MOBILE_QUERY).matches ?? false;
+		setMobile(phone);
+		setOpen(phone ? false : stored === null ? true : stored === "1");
 		setMounted(true);
 		return () => off?.();
 	}, []);
@@ -140,7 +150,28 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 		return () => window.removeEventListener("resize", onResize);
 	}, []);
 
+	// Crossing the phone breakpoint: entering it closes the drawer; leaving
+	// it restores the stored desktop preference.
+	useEffect(() => {
+		if (!window.matchMedia) return;
+		const media = window.matchMedia(MOBILE_QUERY);
+		const onChange = () => {
+			setMobile(media.matches);
+			setOpen(media.matches ? false : localStorage.getItem(STORAGE_KEY) !== "0");
+		};
+		media.addEventListener("change", onChange);
+		return () => media.removeEventListener("change", onChange);
+	}, []);
+
+	const close = useCallback(() => setOpen(false), []);
+
 	const toggle = useCallback(() => {
+		// The phone drawer is transient: it never rewrites the desktop
+		// preference.
+		if (mobile) {
+			setOpen((v) => !v);
+			return;
+		}
 		// Opening while narrow (auto-closed, or the user's own closed-at-
 		// narrow): ask the shell to widen to the threshold — the resize
 		// listener flips `narrow` and the sidebar appears. The preference
@@ -156,7 +187,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 			localStorage.setItem(STORAGE_KEY, v ? "0" : "1");
 			return !v;
 		});
-	}, [narrow, open]);
+	}, [narrow, open, mobile]);
 
 	// ⌘B: the global shortcut dispatches kbdEventForAction("toggle-sidebar")
 	// and the context answers on exactly that name — the shared spelling
@@ -172,7 +203,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	}, [toggle]);
 
 	return (
-		<SidebarContext.Provider value={{ open: open && !narrow, toggle }}>
+		<SidebarContext.Provider value={{ open: open && !narrow, toggle, mobile, close }}>
 			{/* transitions gated on mount: no slide-in flash on page load */}
 			<div className={cn("flex h-dvh", mounted && "[&_.sidebar-motion]:transition-[width,margin,opacity]")}>{children}</div>
 		</SidebarContext.Provider>
@@ -383,7 +414,7 @@ export type SessionKindFilter = "teach" | "all" | "practice";
 const KIND_FILTER_KEY = "lh:session-kind-filter";
 
 function SessionsSidebar() {
-	const { open, toggle } = useSidebar();
+	const { open, toggle, mobile, close } = useSidebar();
 	const [chats, setChats] = useState<ChatListItem[] | null>(null);
 	const [query, setQuery] = useState("");
 	const [kindFilter, setKindFilter] = useState<SessionKindFilter>("all");
@@ -638,10 +669,34 @@ function SessionsSidebar() {
 		// freshness (S6) — no interval, nothing standing.
 	}, [open, pathname, refresh]);
 
+	// Phone drawer: navigating (a session, a new session) closes it.
+	useEffect(() => {
+		if (mobile) close();
+	}, [pathname, mobile, close]);
+
 	return (
+		<>
+		{/* Phone drawer backdrop: tap outside to close. */}
+		{mobile && open && (
+			<div
+				data-testid="sidebar-backdrop"
+				aria-hidden
+				onClick={close}
+				className="fixed inset-0 z-40 bg-black/50"
+			/>
+		)}
 		<aside
-			className={cn("sidebar-motion shrink-0 overflow-hidden duration-200", open ? "w-72" : "w-0")}
+			className={cn(
+				"sidebar-motion shrink-0 overflow-hidden duration-200",
+				// Phone: overlay drawer above the page, never squeezing it.
+				mobile && "fixed inset-y-0 left-0 z-50",
+				open ? "w-72" : "w-0",
+			)}
 			aria-hidden={!open}
+			// Opening Settings from the drawer closes it on a phone.
+			onClickCapture={(e) => {
+				if (mobile && (e.target as Element).closest('[data-testid="settings-entry"]')) close();
+			}}
 		>
 			<div className="flex h-full w-72 flex-col border-r bg-background">
 				{/* LH wordmark — the owner's header; close toggle sits at the edge.
@@ -932,6 +987,7 @@ function SessionsSidebar() {
 					onDeleted={onDeleted}
 				/>
 			</aside>
+		</>
 	);
 }
 
