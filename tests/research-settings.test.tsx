@@ -6,13 +6,14 @@ import { parseHTML } from "linkedom";
 import { AgentSection } from "../components/settings/agent-section.tsx";
 import type { AgentSettings } from "../src/core/index.ts";
 
-it("without SearXNG, Research stays interactive and the search row reports Off with its reason", async () => {
+it("keyless settings keep Research interactive while search-engine setup retains its own disabled state", async () => {
 	const dom = parseHTML("<html><body><div id='root'></div></body></html>");
 	const globals = globalThis as Record<string, unknown>;
 	const previous = new Map<string, PropertyDescriptor | undefined>();
 	const reason = "No search engine is configured.";
 	const bodies: Record<string, unknown> = {
 		"/api/search": { available: false, engine: null, reason },
+		"/api/keys": { keys: [{ id: "TAVILY_API_KEY", present: false }, { id: "BRAVE_API_KEY", present: false }] },
 		"/api/models": { models: [], slots: { strong: null, cheap: null, vision: null } },
 		"/api/settings/prompts": { prober: [], teacher: [] },
 	};
@@ -54,8 +55,10 @@ it("without SearXNG, Research stays interactive and the search row reports Off w
 		assert.ok(!row.textContent?.includes(reason), "search setup hint is no longer a research-disable hint");
 		act(() => { toggle.click(); });
 		assert.equal(written?.tools?.research, false, "the keyless toggle emits the same stored boolean");
-		assert.equal(document.querySelector('[data-testid="search-engine-status"]')?.textContent, "Off");
-		assert.equal(document.querySelector('[data-testid="search-engine-trigger"]'), null, "nothing to choose");
+		const engine = document.querySelector<HTMLButtonElement>('[data-testid="search-engine-trigger"]')!;
+		assert.ok(engine.className.includes("cursor-not-allowed"), "search engine preference retains its own key gate");
+		act(() => { engine.click(); });
+		assert.equal(document.querySelector('[data-testid="search-engine-menu"]'), null, "keyless engine preference does not open");
 		assert.ok(document.querySelector('[data-testid="search-engine-row"]')?.textContent?.includes(reason));
 	} finally {
 		act(() => { root.unmount(); });

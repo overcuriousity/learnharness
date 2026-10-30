@@ -45,7 +45,7 @@ Future teaching sessions can read the graph instead of starting from scratch. Pr
 
 This fork runs LearnHarness as a self-hosted web app: one Node process behind nginx, for one user. See the [server deployment guide](docs/server-deployment.md).
 
-Add your provider API key and choose your models, then start a session with what you want to understand. LearnHarness supports 30+ provider options, including OpenAI, Anthropic, Google, DeepSeek, and OpenRouter. Web search uses your own SearXNG instance; dictation uses an optional Deepgram key.
+Add your provider API key and choose your models, then start a session with what you want to understand. LearnHarness supports 30+ provider options, including OpenAI, Anthropic, Google, DeepSeek, and OpenRouter. Web search uses your own SearXNG instance or a Tavily/Brave key; dictation uses an optional Deepgram key.
 
 **Dictation:** Create a [Deepgram API key](https://console.deepgram.com/) with the **Member role or higher** ([required for token minting](https://developers.deepgram.com/reference/auth/tokens/grant)) and add it under **Settings → Providers → Dictation**. Choose the language below the key; **Multilingual** supports automatic recognition and mixed-language speech. A `403 Insufficient permissions` error during token minting can indicate an insufficient key role.
 

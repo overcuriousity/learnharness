@@ -32,8 +32,8 @@ import { after, describe, it } from "node:test";
 for (const varName of [
 	"OPENROUTER_API_KEY",
 	"DEEPGRAM_API_KEY",
-	"SEARXNG_URL",
-	"SEARXNG_AUTH_HEADER",
+	"TAVILY_API_KEY",
+	"BRAVE_API_KEY",
 	"OPENAI_API_KEY",
 	"ZAI_API_KEY",
 ]) {

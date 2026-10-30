@@ -25,8 +25,8 @@ import { externalCliEnv } from "../src/core/auth-env.ts";
 for (const varName of [
 	"OPENROUTER_API_KEY",
 	"DEEPGRAM_API_KEY",
-	"SEARXNG_URL",
-	"SEARXNG_AUTH_HEADER",
+	"TAVILY_API_KEY",
+	"BRAVE_API_KEY",
 	"GOOGLE_SEARCH_API_KEY",
 	"GOOGLE_CSE_ID",
 	"OPENAI_API_KEY",
@@ -203,10 +203,10 @@ describe("saveKey / deleteKey (immediate effect, no restart)", () => {
 describe("resolveKeyStatuses (pure projection)", () => {
 	it("same value in env and file is NOT shadowed (redundant, not misleading)", () => {
 		const row = resolveKeyStatuses(
-			{ SEARXNG_URL: "https://search.example.org" },
-			{ SEARXNG_URL: "https://search.example.org" },
-			new Set(["SEARXNG_URL"]),
-		).find((s) => s.id === "SEARXNG_URL")!;
+			{ BRAVE_API_KEY: "BSA-same-value-throwaway-01234" },
+			{ BRAVE_API_KEY: "BSA-same-value-throwaway-01234" },
+			new Set(["BRAVE_API_KEY"]),
+		).find((s) => s.id === "BRAVE_API_KEY")!;
 		assert.ok(row, "the curated id is always in the projection");
 		assert.equal(row.source, "env");
 		assert.ok(!row.shadowedByEnv, "same value both places: redundant, not shadowed");

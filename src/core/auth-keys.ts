@@ -37,15 +37,27 @@ export const AUTH_KEYS: readonly AuthKeyInfo[] = [
 		docsUrl: "https://console.deepgram.com/",
 	},
 	{
+		id: "TAVILY_API_KEY",
+		label: "Tavily",
+		description: "Web-search engine for the researcher sub-agent (AI-native search API). Setting the key activates it — no engine toggle needed.",
+		docsUrl: "https://app.tavily.com/",
+	},
+	{
+		id: "BRAVE_API_KEY",
+		label: "Brave Search",
+		description: "Web-search engine for the researcher sub-agent — the alternative to Tavily. Setting the key activates it.",
+		docsUrl: "https://brave.com/search/api/",
+	},
+	{
 		id: "SEARXNG_URL",
 		label: "SearXNG URL",
-		description: "Base URL of your SearXNG instance (http or https, e.g. https://search.example.org) — the researcher's web search. The instance must allow JSON output.",
+		description: "Base URL of your own SearXNG instance (http or https, e.g. https://search.example.org) — a self-hosted web-search engine for the researcher. The instance must allow JSON output. Setting the URL activates it.",
 		docsUrl: "https://docs.searxng.org/admin/settings/settings_search.html",
 	},
 	{
 		id: "SEARXNG_AUTH_HEADER",
 		label: "SearXNG Authorization header",
-		description: "Optional: the full Authorization header value for an instance behind basic auth (e.g. \"Basic dXNlcjpwYXNz\"). Never shown again after saving.",
+		description: "Optional: the full Authorization header value for a SearXNG instance behind basic auth (e.g. \"Basic dXNlcjpwYXNz\"). Never shown again after saving.",
 		docsUrl: "https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/Authorization",
 	},
 ] as const;
@@ -153,9 +165,10 @@ export type KeyShapeResult = { ok: true } | { ok: false; error: string };
  * a truncated or wrong-family key can never land in the store). Values are
  * TRIMMED first (paste hygiene); empty-after-trim always fails.
  *
- * CURATED keys carry family rules (SEARXNG_URL must be an http(s) base
- * URL without credentials/query/fragment; the SearXNG auth header is any
- * single-line value; Deepgram publishes no format — a length floor).
+ * CURATED keys carry family rules (Tavily's tvly-… prefix; Brave and
+ * Deepgram publish no format — length floors + paste hygiene only;
+ * SEARXNG_URL must be an http(s) base URL without credentials/query/
+ * fragment; the SearXNG auth header is any single-line value).
  * MODEL-PROVIDER keys use genericProviderKeyGuard below instead (families
  * vary by provider — only paste hygiene applies; owner spec: min length
  * ~12, no whitespace). OPENROUTER_API_KEY moved to the generic guard with
@@ -168,6 +181,13 @@ export function validateKeyShape(id: string, rawValue: string): KeyShapeResult {
 			? { ok: true as const }
 			: { ok: false as const, error: `${id} must be at least ${min} characters with no whitespace` };
 	switch (id) {
+		case "TAVILY_API_KEY":
+			return value.startsWith("tvly-")
+				? nonEmpty(20)
+				: { ok: false, error: `${id} must start with "tvly-" (Tavily's key format)` };
+		case "BRAVE_API_KEY":
+			// No public format — a length floor + paste hygiene only.
+			return nonEmpty(20);
 		case "SEARXNG_URL":
 			return isSearxngBaseUrl(value)
 				? { ok: true }

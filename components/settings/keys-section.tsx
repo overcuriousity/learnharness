@@ -79,9 +79,9 @@ async function readCustomStatus(inspectKey = false): Promise<CustomStatus> {
 }
 
 /** The curated tools group, pinned by id (the catalog owns the copy;
- *  these ids are the contract). Derived from the catalog (server fork:
- *  the SearXNG pair replaced Tavily + Brave) — the section can never drift
- *  from core/auth-keys.ts again. */
+ *  these ids are the contract). Derived from the catalog (search wave,
+ *  2026-09-20: the Google CSE pair retired, Tavily + Brave joined) — the
+ *  section can never drift from core/auth-keys.ts again. */
 const TOOL_IDS = AUTH_KEYS.map((k) => k.id) as readonly string[];
 
 /** The custom endpoint's synthetic Add-provider entry (offered only while unconfigured). */
