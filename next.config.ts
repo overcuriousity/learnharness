@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
 	// The manual copies the docs require — public/ and .next/static — are
 	// done by scripts/build-server.mjs.
 	output: "standalone",
+	// proxy.ts matches /api/*, so Next buffers every API body up to this
+	// limit — and silently TRUNCATES beyond it. 25 MB = the library upload
+	// cap (src/server/library-upload.ts UPLOAD_MAX_BYTES) and nginx's
+	// client_max_body_size; the upload route rejects larger bodies by
+	// Content-Length before reading.
+	experimental: { proxyClientMaxBodySize: "25mb" },
 	// SAFETY (empirically verified 2026-09-17): without this, output file
 	// tracing sweeps the repo's real data/ — chat records, graph ledgers —
 	// INTO the standalone bundle. A shipped desktop app would carry the

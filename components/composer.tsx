@@ -4,6 +4,8 @@ import { ArrowRightIcon, CornerDownLeftIcon, SquareIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Hint } from "@/components/ui/hint";
 import { PathInput } from "@/components/path-input";
+import { LibraryUploadButton } from "@/components/library-upload-button";
+import { useRef } from "react";
 
 /**
  * The chat composer — content row ONLY (the persistent rounded shell lives in
@@ -76,6 +78,8 @@ export function Composer({
 	 *  empty-Enter share it. */
 	onNext?: () => void;
 }) {
+	const ownInputRef = useRef<HTMLDivElement>(null);
+	const pathInputRef = inputRef ?? ownInputRef;
 	const act = () => {
 		const action = enterAction({ busy, canSend, nextProblem });
 		if (action === "stop") onStop();
@@ -91,8 +95,9 @@ export function Composer({
 				act();
 			}}
 		>
+			<LibraryUploadButton inputRef={pathInputRef} />
 			<PathInput
-				ref={inputRef}
+				ref={pathInputRef}
 				value={value}
 				onValueChange={onChange}
 				defaultDropTarget
