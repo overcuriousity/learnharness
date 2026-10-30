@@ -3,7 +3,7 @@ import type { AssistantMessage, Message, ToolResultMessage, Usage, Tool } from "
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { processImage, type ProcessImageResult } from "../image-processing/index.ts";
 import { Type } from "typebox";
-import { resolveSourcePath } from "../tools/fs-shared.ts";
+import { resolveLibraryPath } from "../tools/fs-shared.ts";
 import { piEngineFor, type PiEngine, type ThinkingLevel } from "../models.ts";
 import { providerEventObserver, type ProviderEventObserver } from "../provider-events.ts";
 import type { PdfResult, PdfToolInput } from "../../core/contracts.ts";
@@ -168,7 +168,12 @@ export async function runPdfReaderAgent(
 ): Promise<PdfResult> {
 	const headless = opts.headless ?? getHeadless();
 	const maxIterations = opts.maxIterations ?? MAX_ITERATIONS;
-	const pdfPath = resolveSourcePath(input.path);
+	let pdfPath: string;
+	try {
+		pdfPath = await resolveLibraryPath(input.path);
+	} catch (err) {
+		return { path: input.path, question: input.question, brief: `PDF failed: ${err instanceof Error ? err.message : String(err)}`, pagesRead: [], pagesConsulted: [] };
+	}
 
 	// Deterministic upfront failure: unreadable / unparseable
 	// for renders — the brief never starts on a broken source.

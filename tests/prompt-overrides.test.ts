@@ -30,6 +30,7 @@ import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import { createFauxCore } from "@earendil-works/pi-ai";
 import type { PiEngine } from "../src/agent/models.ts";
+import { TEST_LIBRARY } from "./helpers/library.ts";
 
 // ── the seam, BEFORE any config-loading import ──────────────────────────────
 const TMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), "lh-prompt-overrides-"));

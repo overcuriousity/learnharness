@@ -10,7 +10,7 @@ import {
 	isBinaryFile,
 	matchGlob,
 	MAX_OUTPUT_BYTES,
-	resolveSourcePath,
+	resolveLibraryPath,
 	truncateGrepLine,
 	walkFiles,
 	WALK_TIMEOUT_MS,
@@ -33,7 +33,7 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const grepInput = Type.Object({
 	pattern: Type.String({ minLength: 1, description: "Search pattern (regex or literal string)" }),
 	path: Type.Optional(
-		Type.String({ description: "Directory or file to search (default: the learner's home directory)" }),
+		Type.String({ description: "Directory or file to search (default: the library folder)" }),
 	),
 	glob: Type.Optional(Type.String({ description: "Filter files by glob pattern, e.g. '*.ts' or '**/*.spec.ts'" })),
 	ignoreCase: Type.Optional(Type.Boolean({ description: "Case-insensitive search (default: false)" })),
@@ -53,7 +53,7 @@ export const grepTool: AgentTool<typeof grepInput> = {
 	parameters: grepInput,
 	execute: serverExecute("grep", grepInput, async (input, ctx) => {
 		if (ctx?.signal?.aborted) return "Operation aborted";
-		const searchPath = resolveSourcePath(input.path);
+		const searchPath = await resolveLibraryPath(input.path);
 
 		let stat;
 		try {

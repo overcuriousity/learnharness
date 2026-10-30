@@ -19,10 +19,7 @@ import { jobTools, type DemoInput, type PdfInput, type ResearchInput, type Visua
 import { planTools, type PlanToolContext } from "./tools/plan.ts";
 import { probeDoneTool, type ProbeDoneContext } from "./tools/probe.ts";
 import { proberGraphTools } from "./tools/graph.ts";
-import { readTool } from "./tools/read.ts";
-import { lsTool } from "./tools/ls.ts";
-import { findTool } from "./tools/find.ts";
-import { grepTool } from "./tools/grep.ts";
+import { libraryAvailable, libraryFileTools } from "./tools/library-tools.ts";
 import { healToolRecord } from "./tools/heal.ts";
 import type { GraphStore } from "../core/ports.ts";
 
@@ -319,13 +316,10 @@ export function createProberTools(
 			{
 				...quizzing,
 				ask_user_question: askUserQuestionTool,
-				// The learner-filesystem set is always-on (user-decided 2026-09,
-				// sources v1): the prober inspects and LOCATES learner-referenced
-				// files while assessing the edge. Read-only by construction.
-				read: readTool,
-				ls: lsTool,
-				find: findTool,
-				grep: grepTool,
+				// The learner-filesystem set (sources v1): the prober inspects and
+				// LOCATES learner-referenced files while assessing the edge.
+				// Read-only, and only when the library folder is configured.
+				...libraryFileTools(),
 				// Job dispatch in the probe phase (owner ruling, 2026-09-20):
 				// research + pdf are ALWAYS available in every phase — the
 				// prober can verify facts or read learner PDFs while assessing.
@@ -333,7 +327,7 @@ export function createProberTools(
 				// context). Same user-toggle filtering as the teacher; research
 				// remains available without a search-provider key.
 				...(jobs.research ? { research: jobs.research } : {}),
-				pdf: jobs.pdf!,
+				...(libraryAvailable() ? { pdf: jobs.pdf! } : {}),
 				// The map reader (wave 7): present only when the settings gate
 				// opened.
 				...(ctx.graphStore
@@ -431,6 +425,13 @@ function withoutMechanics(enabled?: EnabledTools): EnabledTools | undefined {
 	return rest;
 }
 
+/** The pdf job reads a library file: no library, no pdf tool. */
+function withoutPdfUnlessLibrary(tools: Record<string, AgentTool<any>>): Record<string, AgentTool<any>> {
+	if (libraryAvailable()) return tools;
+	const { pdf: _pdf, ...rest } = tools;
+	return rest;
+}
+
 export function createTeacherTools(
 	ctx: TeacherToolContext,
 	enabled?: EnabledTools,
@@ -449,16 +450,12 @@ export function createTeacherTools(
 			{
 			...quizzing,
 			ask_user_question: askUserQuestionTool,
-			// The learner-filesystem set is always-on (user-decided 2026-09,
-			// sources v1): the teacher locates and reads learner-referenced
-			// files on its own terms — nothing auto-injects. Read-only by
-			// construction (fs-shared.ts).
-			read: readTool,
-			ls: lsTool,
-			find: findTool,
-			grep: grepTool,
+			// The learner-filesystem set (sources v1): the teacher locates and
+			// reads learner-referenced files on its own terms — nothing
+			// auto-injects. Read-only, library folder only (fs-shared.ts).
+			...libraryFileTools(),
 			...planTools(ctx),
-			...jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable }),
+			...withoutPdfUnlessLibrary(jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable })),
 		},
 		withoutMechanics(enabled),
 		),

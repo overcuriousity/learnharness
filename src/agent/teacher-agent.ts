@@ -18,6 +18,8 @@ import { practiceTools, type PracticeToolContext } from "./tools/practice.ts";
 import { healToolRecord, withArgumentHeal } from "./tools/heal.ts";
 import { sendToUserTool } from "./tools/send-to-user.ts";
 import { createReadTool, readTool } from "./tools/read.ts";
+import { LEARNER_FILES_SEGMENT } from "./tools/fs-shared.ts";
+import { libraryAvailable } from "./tools/library-tools.ts";
 import { CLAUDE_CODE_PROVIDER } from "./claude-code/constants.ts";
 import { quizInputObject, quizInputProblems } from "../core/question-core.ts";
 import { QUESTION_TOOLS, type EnabledTools } from "../core/pending.ts";
@@ -75,7 +77,10 @@ export type AgentKind = "prober" | "teacher" | "practice";
  *  through config paths, not request state — the store import carries no
  *  chat/job machinery. */
 export function composeInstructions(kind: AgentKind, switches?: Record<string, boolean>): string {
-	const segments = effectivePromptSegments(kind, switches ?? {});
+	// The learner-files doctrine describes tools that exist only with a
+	// library folder (fs-shared.ts): no library, no segment.
+	const library = libraryAvailable();
+	const segments = effectivePromptSegments(kind, switches ?? {}).filter((s) => library || s.path !== LEARNER_FILES_SEGMENT);
 	return segments
 		.map((s) => (s.enabled ? s.overrideText! : s.sourceText))
 		.map((t) => t.trim())
@@ -83,15 +88,20 @@ export function composeInstructions(kind: AgentKind, switches?: Record<string, b
 		.join("\n\n---\n\n");
 }
 
-// The switch-free source composition, cached per kind (module-load once).
+// The switch-free source composition, cached per kind and library state.
 // With promptSwitches provided, baseAgentOptions composes FRESH per turn —
 // an override file written while its switch is ON must flip the next
 // turn's composition; the cache serves only the switches-less path.
-const composedInstructions: Record<AgentKind, string> = {
-	prober: composeInstructions("prober"),
-	teacher: composeInstructions("teacher"),
-	practice: composeInstructions("practice"),
-};
+const composedInstructions = new Map<string, string>();
+function cachedInstructions(kind: AgentKind): string {
+	const key = `${kind}:${libraryAvailable()}`;
+	let text = composedInstructions.get(key);
+	if (text === undefined) {
+		text = composeInstructions(kind);
+		composedInstructions.set(key, text);
+	}
+	return text;
+}
 
 // Money channel (wave 4): the chat-handler passes a per-turn collector;
 // every model call's usage lands in the chat record's turns log
@@ -185,7 +195,7 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 	const stopper = makeQuestionStopper(kind);
 	const systemPrompt = opts.promptSwitches
 		? composeInstructions(kind, opts.promptSwitches)
-		: composedInstructions[kind]!;
+		: cachedInstructions(kind);
 	// Debug recorder (owner, 2026-10-04): raw provider events when
 	// LH_PROVIDER_EVENTS=1 and the caller handed a chatId; undefined is
 	// the normal no-observer path (tests, env-off).

@@ -6,15 +6,15 @@
  */
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall, type FauxResponseStep } from "@earendil-works/pi-ai";
 import type { PiEngine } from "../src/agent/models.ts";
 import { runPdfReaderAgent } from "../src/agent/subagents/pdf-reader.ts";
+import { libraryCopy, TEST_LIBRARY } from "./helpers/library.ts";
 import type { HeadlessApi } from "../src/agent/subagents/headless.ts";
 
-const FIXTURE = path.join(import.meta.dirname, "fixtures", "sample-3page.pdf");
+const FIXTURE = libraryCopy(path.join(import.meta.dirname, "fixtures", "sample-3page.pdf"));
 
 function fauxEngine(steps: FauxResponseStep[]): PiEngine {
 	const faux = createFauxCore({ tokenSize: { min: 64, max: 64 } });
@@ -54,34 +54,22 @@ function fakeHeadless(rendered: { pages: number[] } = { pages: [] }): HeadlessAp
 }
 
 describe("pdf-reader source paths", () => {
-	let home: string;
+	const home = TEST_LIBRARY;
 	const relativePath = path.join("Course notes", "sample document.pdf");
-	const originalHome = process.env.HOME;
-	const originalUserProfile = process.env.USERPROFILE;
 
 	before(() => {
-		home = fs.mkdtempSync(path.join(os.tmpdir(), "lh-pdf-home-"));
-		const target = path.join(home, relativePath);
-		fs.mkdirSync(path.dirname(target), { recursive: true });
-		fs.copyFileSync(FIXTURE, target);
-		process.env.HOME = home;
-		process.env.USERPROFILE = home;
+		libraryCopy(FIXTURE, relativePath);
 	});
 
 	after(() => {
-		if (originalHome === undefined) delete process.env.HOME;
-		else process.env.HOME = originalHome;
-		if (originalUserProfile === undefined) delete process.env.USERPROFILE;
-		else process.env.USERPROFILE = originalUserProfile;
-		fs.rmSync(home, { recursive: true, force: true });
+		fs.rmSync(path.join(home, "Course notes"), { recursive: true, force: true });
 	});
 
-	for (const kind of ["absolute", "home-relative"] as const) {
+	for (const kind of ["absolute", "library-relative"] as const) {
 		it(`${kind} path reaches text tools and rendering as the same absolute path`, async () => {
 			const absolutePath = path.join(home, relativePath);
 			const inputPath = kind === "absolute" ? absolutePath : relativePath;
-			assert.equal(os.homedir(), home);
-			assert.notEqual(path.resolve(relativePath), absolutePath, "cwd is not the learner's home");
+			assert.notEqual(path.resolve(relativePath), absolutePath, "cwd is not the library");
 			const headless = fakeHeadless();
 			const engine = fauxEngine([
 				fauxAssistantMessage([fauxToolCall("pdf_info", {}, { id: "i1" })], { stopReason: "toolUse" }),
@@ -102,14 +90,14 @@ describe("pdf-reader source paths", () => {
 			);
 			assert.equal(result.path, absolutePath);
 			assert.match(result.brief, /^Read the requested document/);
-			assert.match(lastContext, /Pages: 3/, "metadata opened the home-anchored PDF");
+			assert.match(lastContext, /Pages: 3/, "metadata opened the library-anchored PDF");
 			assert.deepEqual(result.pagesRead, [2, 3]);
-			assert.deepEqual(result.pagesConsulted, [1, 2, 3], "search and extraction opened the home-anchored PDF");
+			assert.deepEqual(result.pagesConsulted, [1, 2, 3], "search and extraction opened the library-anchored PDF");
 			assert.deepEqual(headless.paths, [absolutePath]);
 		});
 	}
 
-	it("a missing home-relative source fails before any model call", async () => {
+	it("a missing library-relative source fails before any model call", async () => {
 		let modelCalls = 0;
 		const engine = fauxEngine([]);
 		engine.streamFn = () => {

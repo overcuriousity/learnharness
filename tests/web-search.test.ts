@@ -260,6 +260,7 @@ describe("keyless research dispatch (jobTools)", () => {
 
 import { createProberTools, createTeacherTools } from "../src/agent/tools.ts";
 import type { ChatStore } from "../src/core/ports.ts";
+import { TEST_LIBRARY } from "./helpers/library.ts";
 
 /** A chat-store stub — the registry factories only CLOSE OVER it at build
  *  time (quiz/plan superRefines read it at execute time, never here). */

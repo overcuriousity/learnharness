@@ -25,7 +25,6 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { after, afterEach, before, describe, it } from "node:test";
 import { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall, type AssistantMessage, type FauxResponseStep } from "@earendil-works/pi-ai";
@@ -74,6 +73,7 @@ import { providerKeyMissing, type ModelSlotName } from "../src/core/settings.ts"
 import type { PiEngine } from "../src/agent/models.ts";
 import type { SearchProvider } from "../src/core/search.ts";
 import { PATHS } from "../config.ts";
+import { libraryCopy, TEST_LIBRARY } from "./helpers/library.ts";
 import { projectView as projectNative } from "../src/core/view.ts";
 import { subscribe } from "../src/core/events.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
@@ -729,28 +729,17 @@ describe("research runner (async protocol §3)", () => {
 
 
 describe("pdf runner (sources v0)", () => {
-	const PDF_FIXTURE = path.join(import.meta.dirname, "fixtures", "sample-3page.pdf");
+	const PDF_FIXTURE = libraryCopy(path.join(import.meta.dirname, "fixtures", "sample-3page.pdf"));
 	const PDF_INPUT = { path: PDF_FIXTURE, question: "What is the integral of x dx?" };
 	const relativePath = path.join("Course notes", "sample document.pdf");
-	let home: string;
-	const originalHome = process.env.HOME;
-	const originalUserProfile = process.env.USERPROFILE;
+	const home = TEST_LIBRARY;
 
 	before(() => {
-		home = fs.mkdtempSync(path.join(os.tmpdir(), "lh-pdf-job-home-"));
-		const target = path.join(home, relativePath);
-		fs.mkdirSync(path.dirname(target), { recursive: true });
-		fs.copyFileSync(PDF_FIXTURE, target);
-		process.env.HOME = home;
-		process.env.USERPROFILE = home;
+		libraryCopy(PDF_FIXTURE, relativePath);
 	});
 
 	after(() => {
-		if (originalHome === undefined) delete process.env.HOME;
-		else process.env.HOME = originalHome;
-		if (originalUserProfile === undefined) delete process.env.USERPROFILE;
-		else process.env.USERPROFILE = originalUserProfile;
-		fs.rmSync(home, { recursive: true, force: true });
+		fs.rmSync(path.join(home, "Course notes"), { recursive: true, force: true });
 	});
 
 	/** A pdf-reader that triages, extracts pages 1-2, then briefs. */
@@ -795,7 +784,7 @@ describe("pdf runner (sources v0)", () => {
 	});
 
 	for (const mode of ["dispatch", "recovery"] as const) {
-		it(`resolves a home-relative PDF from ${mode} input without rewriting history`, async () => {
+		it(`resolves a library-relative PDF from ${mode} input without rewriting history`, async () => {
 			const chat = chatStore.createChat(`Test: relative PDF ${mode}`);
 			trackChat(chat.id);
 			const toolCallId = `call-pdf-relative-${mode}`;
@@ -1493,7 +1482,7 @@ describe("prompt composition", () => {
 			const instructions = composeInstructions(kind);
 			assert.ok(instructions.includes("## Learner files"), `${kind} carries the shared learner-files fragment`);
 			assert.ok(instructions.includes("find it yourself with `find`"), `${kind} knows to locate files itself`);
-			assert.ok(instructions.includes("home directory"), `${kind} knows the home-anchored path rule`);
+			assert.ok(instructions.includes("library folder"), `${kind} knows the library-anchored path rule`);
 		}
 		// the agent's OWN fragments compose before the shared appendix
 		// (the reorder's order rule, 2026-09-27: job and method lead)

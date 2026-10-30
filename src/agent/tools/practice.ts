@@ -17,10 +17,7 @@
 import { Type, type Static } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { resolveTargetId } from "../../core/chains.ts";
-import { readTool } from "./read.ts";
-import { lsTool } from "./ls.ts";
-import { findTool } from "./find.ts";
-import { grepTool } from "./grep.ts";
+import { libraryAvailable, libraryFileTools } from "./library-tools.ts";
 import { jobTools, type JobToolContext } from "./jobs.ts";
 import { proberGraphTools, type GraphToolContext } from "./graph.ts";
 import { activeProblemOf } from "../../core/native-messages.ts";
@@ -238,12 +235,9 @@ export function practiceTools(ctx: PracticeToolContext): Record<string, AgentToo
 	return healToolRecord({
 		problem: problemTool(gate, ctx.graphNodes),
 		conclude: concludeTool(gate),
-		read: readTool,
-		ls: lsTool,
-		find: findTool,
-		grep: grepTool,
+		...libraryFileTools(),
 		...(jobs?.research ? { research: jobs.research } : {}),
-		...(jobs ? { pdf: jobs.pdf! } : {}),
+		...(jobs && libraryAvailable() ? { pdf: jobs.pdf! } : {}),
 		...(ctx.graph ? proberGraphTools(ctx.graph) : {}),
 	});
 }
