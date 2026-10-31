@@ -134,10 +134,10 @@ export async function runVisualMaker(input: VisualMakerInput, opts: VisualMakerO
 	const brief = input.brief.trim() || "(no brief)";
 	const maxIterations = opts.maxIterations ?? 8;
 
-	const reason = headless.unavailableReason();
-	if (reason) {
-		return { svg: "", notes: `FAILED: ${reason}` };
-	}
+	// No Chrome gate (server fork): renders go through resvg in-process;
+	// the browser is only renderSvg's fallback for SVGs resvg cannot parse,
+	// and that path reports its own error. Upstream's desktop app always had
+	// a browser, so its gate never fired; on a server it blocked every diagram.
 
 	const tools = createVisualTools();
 	const toolDeclarations = Object.values(tools);

@@ -755,10 +755,28 @@ describe("visual maker (fake model + fake headless)", () => {
 		assert.match(result.notes ?? "", /^FAILED: the maker never wrote an SVG/);
 	});
 
-	it("fails with a clear message when no Chrome is available", async () => {
-		const result = await runVisualMaker({ brief: "b" }, { engine: scriptedModel([{ text: "x" }]), headless: noChromeHeadless() });
+	it("runs without Chrome: diagrams render natively (server fork)", async () => {
+		// No browser, but renderSvg still works — resvg needs none.
+		const headless = { ...fakeHeadless(), available: () => false, unavailableReason: () => "No Chrome/Chromium found" };
+		const model = scriptedModel([
+			{ toolCalls: [{ toolCallId: "w1", toolName: "write_svg", input: { svg: SVG_1 } }] },
+			{ toolCalls: [{ toolCallId: "r1", toolName: "render_svg", input: {} }] },
+			{ text: "Looks right." },
+		]);
+		const result = await runVisualMaker({ brief: "b" }, { engine: model, headless });
+		assert.equal(result.svg, SVG_1);
+		assert.equal(result.notes, "Looks right.");
+	});
+
+	it("an SVG nothing can render fails with the renderer's message", async () => {
+		const headless = { ...noChromeHeadless(), renderSvg: async () => { throw new Error("No render engine available: no system Chrome/Chromium was found."); } };
+		const model = scriptedModel([
+			{ toolCalls: [{ toolCallId: "w1", toolName: "write_svg", input: { svg: SVG_1 } }] },
+			{ text: "Done." },
+		]);
+		const result = await runVisualMaker({ brief: "b" }, { engine: model, headless });
 		assert.equal(result.svg, "");
-		assert.match(result.notes ?? "", /^FAILED: .*Chrome/);
+		assert.match(result.notes ?? "", /^FAILED: rendering the final SVG failed — .*Chrome/);
 	});
 });
 
