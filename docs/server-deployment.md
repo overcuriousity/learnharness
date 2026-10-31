@@ -43,6 +43,7 @@ Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a Se
 
 ## Subscriptions
 
+- **ChatGPT:** Settings → Providers → ChatGPT → Connect opens OpenAI's sign-in in your browser. Afterwards the browser is sent to `http://127.0.0.1:…/auth/callback?…` — the server's own address, so the page cannot be reached. Copy that page's address into the field under "Waiting for browser sign-in…" and press **Finish sign-in**; the server hands it to its own sign-in listener.
 - **GitHub Copilot, Grok:** device codes; no extra step.
 
 ## Claude Code

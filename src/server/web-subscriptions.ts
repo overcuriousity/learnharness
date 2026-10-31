@@ -47,6 +47,9 @@ export function createWebSubscriptionOwner(options: {
 	const launches = new AsyncLocalStorage<string[]>();
 	const actions = new Map<string, BrowserAction>();
 	let chatGPTLaunch = 0;
+	/** The pending ChatGPT sign-in's loopback redirect_uri (server fork: the
+	 *  callback relay, src/server/chatgpt-callback-relay.ts). */
+	let chatGPTRedirect: string | undefined;
 	const openExternal = async (target: string) => {
 		const captured = launches.getStore();
 		if (!captured || new URL(target).protocol !== "https:") throw new Error("No browser action is pending.");
@@ -70,6 +73,7 @@ export function createWebSubscriptionOwner(options: {
 				: subscriptionControl({ ...command, providerId }, native));
 			let browserAction: string | undefined;
 			const target = targets[0];
+			if (target && providerId === "chatgpt") chatGPTRedirect = new URL(target).searchParams.get("redirect_uri") ?? undefined;
 			if (target) {
 				const scope = providerId === "chatgpt" ? "chatgpt" : `${providerId}:${command.attemptId}:${command.actionId}`;
 				for (const [id, action] of actions) if (action.expires <= Date.now() || action.scope === scope) actions.delete(id);
@@ -90,6 +94,7 @@ export function createWebSubscriptionOwner(options: {
 			if (action.expires <= Date.now() || !await action.current()) return;
 			return action.target;
 		},
+		chatGPTRedirect: () => chatGPTRedirect,
 		close() { actions.clear(); chatgpt.close(); native.close(); },
 	};
 }

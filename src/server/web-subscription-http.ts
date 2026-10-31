@@ -39,7 +39,7 @@ export function subscriptionRequestOrigin(request: Request): string | undefined 
 		return addressed.origin;
 	} catch { return; }
 }
-function authorized(request: Request): boolean {
+export function authorized(request: Request): boolean {
 	const origin = subscriptionRequestOrigin(request);
 	if (!origin || request.headers.get("x-learnharness-subscriptions") !== "1") return false;
 	if (request.headers.get("sec-fetch-site") === "cross-site") return false;
