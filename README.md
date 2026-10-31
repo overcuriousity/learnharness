@@ -51,7 +51,7 @@ Add your provider API key and choose your models, then start a session with what
 
 ## Your keys, your data
 
-- **Your keys and models.** No LearnHarness subscription or markup. You pay your providers for usage; a live cost meter shows model costs.
+- **Your keys and models.** No LearnHarness subscription or markup. Billing depends on your provider, CLI configuration, subscription, or local setup. The live cost meter estimates known API costs, not subscription, CLI, or custom-endpoint charges.
 - **Local storage.** Your chats, graph, settings, and API keys live on your machine. Learning records are plain files you can inspect.
 - **External services.** Models run through your configured providers. Model requests send the context needed for the task; web research and dictation also contact external services. Local storage does not mean offline processing.
 - **Inspectable behavior.** System prompts are visible and editable. The app is open source under the AGPL-3.0 license.
@@ -64,7 +64,7 @@ npm run dev        # http://localhost:3000
 npm test           # deterministic, no LLM, no network
 ```
 
-See the [development guide](docs/development.md), [architecture](docs/architecture.md), and [server deployment guide](docs/server-deployment.md).
+See the [development guide](docs/development.md), [architecture](docs/architecture.md), [keyboard reference](docs/keyboard.md), and [server deployment guide](docs/server-deployment.md).
 
 Questions, bug reports, and feature requests: [GitHub Issues](https://github.com/amosblomqvist/learnharness/issues).
 
