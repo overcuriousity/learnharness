@@ -67,3 +67,15 @@ describe("GraphChromeRow — the empty-graph ruling (owner, 2026-09-25)", () => 
 		assert.ok(!quiet.includes("No matching nodes."));
 	});
 });
+describe("GraphChromeRow — phone widths (<768px)", () => {
+	it("Chains and Import are icon-only on phones; their labels stay for screen readers", () => {
+		const html = renderToStaticMarkup(createElement(GraphChromeRow, { ...PROPS, isEmpty: false }));
+		assert.ok(html.includes('<span class="max-md:sr-only">Chains</span>'));
+		assert.ok(html.includes('<span class="max-md:sr-only">Import notes…</span>'));
+	});
+
+	it("the search uses a flex basis on phones, so the right-anchored row can shrink it", () => {
+		const html = renderToStaticMarkup(createElement(GraphChromeRow, { ...PROPS, isEmpty: false }));
+		assert.match(html, /class="[^"]*\bw-56\b[^"]*\bmax-md:w-auto max-md:basis-56\b/);
+	});
+});

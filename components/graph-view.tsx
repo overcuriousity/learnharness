@@ -867,7 +867,11 @@ export function GraphChromeRow({
 	return (
 		<>
 			{!isEmpty && (
-				<div className="graph-chrome-fade-in w-56 min-w-0 shrink rounded-xl border bg-card/85 px-1 py-[3px] shadow-lg backdrop-blur">
+				// Phone widths (<768px): a 224px basis instead of a fixed width —
+				// a definite width counts in full toward the row's min-content
+				// size, so the right-anchored row overflowed the left screen
+				// edge instead of shrinking the search.
+				<div className="graph-chrome-fade-in w-56 min-w-0 shrink rounded-xl border bg-card/85 px-1 py-[3px] shadow-lg backdrop-blur max-md:w-auto max-md:basis-56">
 					<Hint
 						// ⌘F focuses node search (surface-scoped registry action).
 						label="Search nodes"
@@ -900,10 +904,11 @@ export function GraphChromeRow({
 							type="button"
 							onClick={onOpenChains}
 							data-testid="open-chain-table"
-							className="flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
+							className="flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent max-md:px-2"
 						>
 							<ListTreeIcon className="size-3" />
-							Chains
+							{/* Phone widths: icon-only (the label stays for screen readers). */}
+							<span className="max-md:sr-only">Chains</span>
 						</button>
 					</Hint>
 				</div>
