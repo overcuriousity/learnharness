@@ -18,8 +18,9 @@ server {
     ssl_certificate     /etc/ssl/learnharness/fullchain.pem;
     ssl_certificate_key /etc/ssl/learnharness/privkey.pem;
 
-    # Library uploads and notes import: 25 MB per request (the app's limit).
-    client_max_body_size 25m;
+    # Library uploads and notes import: 25 MiB of files per request, plus
+    # multipart headroom (lib/notes-import-limits.ts MAX_IMPORT_BODY_BYTES).
+    client_max_body_size 26m;
 
     # Security headers. No Content-Security-Policy: demos are agent-written
     # HTML with inline scripts (and optional CDN libraries) rendered in a

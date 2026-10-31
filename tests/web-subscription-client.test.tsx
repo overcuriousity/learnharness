@@ -70,7 +70,7 @@ test("web notices identify the server machine and same-machine ChatGPT sign-in; 
 	const { subscriptionNotice, subscriptionDisconnectCopy } = await import("../components/settings/subscription-connections.tsx");
 	assert.equal(chatGPTNotice(), CHATGPT_NOTICE); assert(CHATGPT_NOTICE.includes("on this device"));
 	assert(chatGPTNotice(true).includes("on the machine running LearnHarness"));
-	assert(chatGPTNotice(true).endsWith("Complete ChatGPT sign-in in a browser on that same machine."));
+	assert(!chatGPTNotice(true).includes("same machine"), "server fork: a remote browser can finish sign-in (callback relay)");
 	for (const label of ["GitHub Copilot", "Grok"]) {
 		assert(subscriptionNotice(label).includes("stored locally")); assert(subscriptionDisconnectCopy(label).includes("from this device"));
 		assert(subscriptionNotice(label, true).includes("on the machine running LearnHarness"));

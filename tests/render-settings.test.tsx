@@ -153,6 +153,18 @@ describe("AgentSection (thin SSR)", () => {
 		assert.ok(html3.includes("SearXNG"), "a SearXNG pin shows in the trigger too");
 	});
 
+	it("the Jina reader fallback row sits right under Search engine, off by default (server fork)", () => {
+		const row = (agent: Parameters<typeof AgentSection>[0]["agent"]) => {
+			const html = renderToStaticMarkup(<AgentSection agent={agent} models={undefined} graph={undefined} onSectionChange={() => {}} onModelsChange={() => {}} />);
+			assert.ok(html.indexOf('data-testid="search-engine-row"') < html.indexOf('data-testid="jina-fallback-row"'), "below the engine row");
+			return (html.split('data-testid="jina-fallback-row"')[1] ?? "").split('data-testid="group-context"')[0] ?? "";
+		};
+		const off = row(undefined);
+		assert.ok(off.includes("Jina reader fallback")); assert.ok(off.includes("r.jina.ai"));
+		assert.ok(off.includes('aria-checked="false"'), "absent = off");
+		assert.ok(row({ search: { jinaFallback: true } }).includes('aria-checked="true"'));
+	});
+
 	it("the prober graph-tools row: FIRST in the Tools group, default ON, its own key (wave 7)", () => {
 		// Default state: graph on, graphTools absent → ON, the describing
 		// hint rides (the search-row hint discipline).

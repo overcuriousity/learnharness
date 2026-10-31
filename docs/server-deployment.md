@@ -9,7 +9,7 @@ Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a Se
 1. Create the service user and folders:
    ```bash
    sudo useradd --system --home-dir /var/lib/learnharness --shell /usr/sbin/nologin learnharness
-   sudo install -d -o learnharness -g learnharness -m 0700 /var/lib/learnharness/data /var/lib/learnharness/secrets
+   sudo install -d -o learnharness -g learnharness -m 0700 /var/lib/learnharness/data /var/lib/learnharness/secrets /var/lib/learnharness/home
    sudo install -d -g learnharness -m 0750 /srv/learnharness/library
    sudo install -d -o learnharness -g learnharness -m 0750 /srv/learnharness/library/uploads
    ```
@@ -20,9 +20,10 @@ Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a Se
    ```
    `npm run build` runs `next build` and `scripts/build-server.mjs`, which copies `.next/static` and `public/` into `.next/standalone`. The build needs no network beyond `npm ci`.
 3. Install the output: `sudo rsync -a --delete .next/standalone/ /opt/learnharness/app/`
-4. Install the unit: copy `deploy/learnharness.service` to `/etc/systemd/system/`, set `LH_PUBLIC_ORIGIN` (and `CHROME_PATH` if wanted), then `sudo systemctl daemon-reload && sudo systemctl enable --now learnharness`.
-5. Install nginx: adapt `deploy/nginx.conf.example` (host name, certificate paths), then `sudo nginx -t && sudo systemctl reload nginx`.
-6. Open the site, add a model key under Settings → Providers, and set `SEARXNG_URL` (or a Tavily/Brave key) under Providers → Search.
+4. Install Chromium for demo verification (e.g. Debian: `sudo apt install chromium`, binary `/usr/bin/chromium`). A snap-packaged Chromium does not run inside the unit's sandbox; use a native package.
+5. Install the unit: copy `deploy/learnharness.service` to `/etc/systemd/system/`, set `LH_PUBLIC_ORIGIN` and `CHROME_PATH`, then `sudo systemctl daemon-reload && sudo systemctl enable --now learnharness`.
+6. Install nginx: adapt `deploy/nginx.conf.example` (host name, certificate paths), then `sudo nginx -t && sudo systemctl reload nginx`.
+7. Open the site, add a model key under Settings → Providers, and set `SEARXNG_URL` (or a Tavily/Brave key) under Providers → Search.
 
 **Updating:** `git pull` (or merge an upstream release, below), repeat steps 2–3, `sudo systemctl restart learnharness`.
 
@@ -32,13 +33,30 @@ Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a Se
 |---|---|
 | `HOSTNAME=127.0.0.1`, `PORT=3000` | Listen address; only nginx talks to it. |
 | `NODE_ENV=production`, `NEXT_TELEMETRY_DISABLED=1` | Production; no Next.js telemetry. |
-| `LH_SERVER_MODE=1` | Disables the Claude Code provider (it would run the `claude` CLI as the service user) and ChatGPT sign-in (its callback listens on the server's own `127.0.0.1`). Copilot and Grok (device codes) work. |
 | `LH_DATA_DIR` | Chats, graph, settings, jobs. |
 | `LH_AUTH_FILE` | API keys (`auth.json`). Subscription credentials are stored in the same folder. |
 | `LH_LIBRARY_DIR` | The only folder the agent's file tools can read; uploads land in its `uploads/`. Unset = no file tools. Must not overlap the data or auth folders. |
 | `LH_PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://learn.example.org`. Required behind TLS: same-origin checks would otherwise see `http:` and refuse (403). |
-| `CHROME_PATH` | A Chrome/Chromium binary for demo verification. Without one, demo jobs fail with a clear message. |
+| `CHROME_PATH` | A Chrome/Chromium binary for demo verification. Without one, demo jobs fail with a clear message. Diagrams do not need it (they render natively). |
+| `HOME` | The service user's home, `/var/lib/learnharness/home`: the Claude Code CLI's binary, configuration and sign-in live here. |
 | `SEARXNG_URL`, `SEARXNG_AUTH_HEADER` | SearXNG search; settable in the environment or in Settings → Providers → Search. The header is the full `Authorization` value (e.g. `Basic …`) and is never shown again. `TAVILY_API_KEY` / `BRAVE_API_KEY` work the same way. |
+
+## Subscriptions
+
+- **ChatGPT:** Settings → Providers → ChatGPT → Connect opens OpenAI's sign-in in your browser. Afterwards the browser is sent to `http://127.0.0.1:…/auth/callback?…` — the server's own address, so the page cannot be reached. Copy that page's address into the field under "Waiting for browser sign-in…" and press **Finish sign-in**; the server hands it to its own sign-in listener.
+- **GitHub Copilot, Grok:** device codes; no extra step.
+
+## Claude Code
+
+Optional provider that runs the [Claude Code CLI](claude-code.md) on the server, as the `learnharness` user. Install and sign in with that user's home:
+
+```bash
+sudo -u learnharness env HOME=/var/lib/learnharness/home bash   # a shell as the service user
+# then follow https://code.claude.com/docs/en/setup (native install → ~/.local/bin/claude)
+# and run `claude` once to sign in
+```
+
+Then switch it on under Settings → Providers → External CLI → Claude Code (off by default) and pick a Claude Code model. The CLI's own account and configuration decide billing; see [Claude Code](claude-code.md).
 
 ## SearXNG
 
@@ -64,7 +82,7 @@ LH_EGRESS_LOG=/tmp/egress.jsonl NODE_OPTIONS="--import=/opt/learnharness/src/scr
 node scripts/egress-audit.mjs summarize /tmp/egress.jsonl   # exit 1 if any external destination
 ```
 
-Idle, the server makes none. Outbound traffic happens only when you cause it: model calls, web searches (to your SearXNG, or Tavily/Brave when chosen), pages the researcher fetches, and dictation (Deepgram, only with a key and only when you dictate).
+Idle, the server makes none. Outbound traffic happens only when you cause it: model calls, web searches (to your SearXNG, or Tavily/Brave when chosen), pages the researcher fetches (plus r.jina.ai for pages it cannot parse, only with Settings → Agent → Jina reader fallback on), and dictation (Deepgram, only with a key and only when you dictate).
 
 ## Pulling upstream releases
 

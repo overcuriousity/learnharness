@@ -14,9 +14,11 @@ import TurndownService from "turndown";
  * pi extensions (~/.pi/agent/extensions/web-search + web-fetch):
  *
  *   web_search(query, count?) → {title, url, snippet}[]   (injected search port)
- *   web_fetch(url)            → readable markdown text     (Readability + Turndown;
- *                                                          JS-rendered pages fail
- *                                                          with a clear error)
+ *   web_fetch(url)            → readable markdown text     (Readability + Turndown,
+ *                                                          Jina Reader fallback for
+ *                                                          JS-rendered pages when
+ *                                                          agent.search.jinaFallback
+ *                                                          is on — off by default)
  *
  * SEARCH REWIRING (search port wave, 2026-09-20): the Google CSE backend is
  * retired — web_search now runs on the injected search port (core/search.ts).
@@ -51,6 +53,26 @@ function truncate(text: string): string {
 	return `${text.slice(0, MAX_CONTENT_CHARS)}\n\n[Truncated at ${MAX_CONTENT_CHARS} characters]`;
 }
 
+/** Jina Reader fallback for JS-rendered pages (no deps — plain fetch). */
+async function fetchViaJina(url: string): Promise<string | null> {
+	try {
+		const res = await fetch(`https://r.jina.ai/${url}`, {
+			headers: { Accept: "text/markdown", "X-No-Cache": "true" },
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) return null;
+		const content = await res.text();
+		const marker = "Markdown Content:";
+		const start = content.indexOf(marker);
+		if (start < 0) return null;
+		const markdown = content.slice(start + marker.length).trim();
+		if (markdown.length < MIN_USEFUL_CONTENT || markdown.startsWith("Loading...")) return null;
+		return markdown;
+	} catch {
+		return null;
+	}
+}
+
 function htmlToMarkdown(html: string): { title: string; content: string } | null {
 	const { document } = parseHTML(html);
 	const article = new Readability(document as unknown as Document).parse();
@@ -60,7 +82,7 @@ function htmlToMarkdown(html: string): { title: string; content: string } | null
 	return { title: article.title ?? "", content: markdown };
 }
 
-async function fetchAndExtract(url: string): Promise<string> {
+async function fetchAndExtract(url: string, jinaFallback: boolean): Promise<string> {
 	const resp = await fetch(url, {
 		headers: {
 			"User-Agent": USER_AGENT,
@@ -96,8 +118,13 @@ async function fetchAndExtract(url: string): Promise<string> {
 		const header = extracted.title ? `# ${extracted.title}\n\n${sourceLine}\n\n---\n\n` : `${sourceLine}\n\n---\n\n`;
 		return header + truncate(extracted.content);
 	}
-	// Readability failed — likely JS-rendered. No third-party reader
-	// fallback: the URL is never forwarded to another service.
+	// Readability failed — likely JS-rendered. Jina Reader only when the
+	// learner switched it on (server fork: off by default — the URL goes to
+	// r.jina.ai).
+	if (jinaFallback) {
+		const jina = await fetchViaJina(url);
+		if (jina) return truncate(jina);
+	}
 	throw new Error("Could not extract readable content (the page may be JavaScript-rendered)");
 }
 
@@ -114,7 +141,11 @@ const webFetchInput = Type.Object({
 	url: Type.String({ description: "The URL to fetch" }),
 });
 
-export function createWebTools(search: () => SearchProvider | null): Record<string, AgentTool<any>> {
+export function createWebTools(
+	search: () => SearchProvider | null,
+	jinaFallback: () => boolean = () => false,
+): Record<string, AgentTool<any>> {
+	const jina = jinaFallback();
 	return {
 		web_search: {
 			name: "web_search",
@@ -143,7 +174,9 @@ export function createWebTools(search: () => SearchProvider | null): Record<stri
 			label: "web_fetch",
 			description:
 				"Fetch a web page and extract its readable content as markdown (Readability). " +
-				"Handles HTML pages and plain text; JavaScript-rendered pages cannot be extracted.",
+				(jina
+					? "Handles HTML pages and plain text; JS-rendered pages fall back to a reader service."
+					: "Handles HTML pages and plain text; JavaScript-rendered pages cannot be extracted."),
 			parameters: webFetchInput,
 			execute: serverExecute("web_fetch", webFetchInput, async ({ url }): Promise<string> => {
 				try {
@@ -158,7 +191,7 @@ export function createWebTools(search: () => SearchProvider | null): Record<stri
 					return `web_fetch failed: invalid URL "${url}"`;
 				}
 				try {
-					return await fetchAndExtract(url);
+					return await fetchAndExtract(url, jina);
 				} catch (err) {
 					return `web_fetch failed for ${url}: ${err instanceof Error ? err.message : String(err)}`;
 				}

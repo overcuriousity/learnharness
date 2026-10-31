@@ -52,6 +52,7 @@ import {
  *  supports; owner, 2026-09-22). A slot is CONFIGURED iff its model is
  *  present; a level-only slot is inert (kept on disk, resolved as null). */
 export interface EffectiveSlot {
+	cacheRetention?: ModelSlot["cacheRetention"];
 	provider: string;
 	id: string;
 	thinkingLevel?: ThinkingLevel;
@@ -82,7 +83,7 @@ export interface EffectiveSettings {
 		/** The search-engine preference as stored (search wave, 2026-09-20):
 		 *  passthrough delta — engine resolution (pin → auto → unavailable)
 		 *  lives in server/search.ts, where keys are visible. */
-		search: { engine?: SearchEngineId };
+		search: { engine?: SearchEngineId; jinaFallback?: boolean };
 		/** Prober graph tools (wave 7): passthrough delta as stored —
 		 * absent/undefined enabled = ON; consumers use graphToolsEnabled. */
 		graphTools: { enabled?: boolean };
@@ -138,7 +139,10 @@ export function resolveRoleSpec(role: ModelRole, record: UserSettings | null): E
  *  to ride without the factory floor). */
 export function resolveSlot(slot: ModelSlot | undefined): EffectiveSlot | null {
 	if (!slot?.model) return null;
-	return { provider: slot.model.provider, id: slot.model.id, thinkingLevel: slot.thinkingLevel };
+	return {
+		provider: slot.model.provider, id: slot.model.id, thinkingLevel: slot.thinkingLevel,
+		...(slot.cacheRetention !== undefined ? { cacheRetention: slot.cacheRetention } : {}),
+	};
 }
 
 /** Resolve one role's spec — the BYOK chain (owner 2026-09-22): role

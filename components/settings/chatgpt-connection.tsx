@@ -6,9 +6,10 @@ import { ConnectionDialog, ConnectionFooter, ConnectionRow } from "./connection-
 import { Button } from "@/components/ui/button";
 import { Toggle } from "./controls";
 import { useChatGPTBridge } from "./subscription-client";
+import { ChatGPTCallbackPaste } from "./chatgpt-callback-paste";
 
 export const CHATGPT_NOTICE = "LearnHarness stores your ChatGPT account details and credentials in an unencrypted local file on this device. When this connection is used, relevant conversation context, learning material, and tool results are sent directly to OpenAI. ChatGPT plan limits apply; any additional credits are authorized and managed in ChatGPT, not LearnHarness.";
-export function chatGPTNotice(web = false): string { return web ? `${CHATGPT_NOTICE.replace("on this device", "on the machine running LearnHarness")} Complete ChatGPT sign-in in a browser on that same machine.` : CHATGPT_NOTICE; }
+export function chatGPTNotice(web = false): string { return web ? CHATGPT_NOTICE.replace("on this device", "on the machine running LearnHarness") : CHATGPT_NOTICE; }
 export const CHATGPT_BACKGROUND_HINT = "Background work counts toward your ChatGPT plan usage.";
 const BACKGROUND_LABEL = "Allow background use for all ChatGPT accounts";
 const REVOCATION_WARNING = "Account disconnected locally. Remote revocation could not be confirmed.";
@@ -293,6 +294,7 @@ export function ChatGPTUIProvider({ children }: { children: React.ReactNode }) {
 				</div>
 				{!status.available && <p className="mt-3 text-xs text-muted-foreground">ChatGPT sign-in is available only in the desktop app. API-key connections remain available here.</p>}
 				{status.pending && <p role="status" className="mt-3 text-xs text-muted-foreground">Waiting for browser sign-in…</p>}
+				{status.pending && <ChatGPTCallbackPaste />}
 				{context.error && <p role="alert" className="mt-3 text-xs text-red-400">{context.error}</p>}
 				{dialog.kind === "manage" && managed && <div className="mt-4 flex flex-wrap items-center justify-between gap-3" data-testid="chatgpt-account-strip">
 					<div data-testid="chatgpt-managed-identity" className="flex min-w-0 items-center gap-2 text-xs text-foreground">
@@ -332,10 +334,6 @@ export function ChatGPTConnection({ labelClassName }: { setup?: boolean; labelCl
 	const ui = useContext(Context);
 	const active = ui.status.accounts.find((a) => a.id === ui.status.activeId && a.connected);
 	const accounts = ui.status.accounts.filter((a) => a.connected);
-	// Server mode (LH_SERVER_MODE=1): no connection row, one line of why.
-	if (ui.status.serverUnavailable) {
-		return <p className="text-xs text-muted-foreground" data-testid="chatgpt-server-mode">{ui.status.serverUnavailable}</p>;
-	}
 	return <div className="flex flex-col gap-2" data-testid="chatgpt-connection">
 		<ConnectionRow label="ChatGPT" labelClassName={labelClassName} actionTestid={active ? undefined : "chatgpt-login"} action={active ? "Manage…" : "Connect"} disabled={!ui.status.available || ui.busy || ui.status.pending} onAction={() => active ? ui.manage(active.id) : ui.connect()}>
 			{active && <select aria-label="ChatGPT account" value={active.id} disabled={ui.busy || ui.status.pending} onChange={(event) => ui.select(event.target.value)} className="min-w-0 rounded-sm border border-border bg-background px-2 py-1 text-xs text-foreground">

@@ -28,6 +28,7 @@
  */
 
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { CacheRetention } from "@earendil-works/pi-ai";
 import { AUTH_PROVIDER_KEYS } from "./auth-keys.ts";
 import { CLAUDE_CODE_PROVIDER } from "./contracts/claude-code.ts";
 import type { ModelRole } from "../../config.ts";
@@ -187,11 +188,15 @@ export class ProviderKeyMissingError extends Error {
 	}
 }
 
+export const CACHE_RETENTIONS = ["none", "short", "long"] as const satisfies readonly CacheRetention[];
+
 /** One slot's stored state. BYOK (owner, 2026-09-22): the WRITE side
  *  requires model (a level alone can never run — no factory floor); the
  *  sanitizer keeps whatever is on disk, but RESOLUTION treats a slot
  *  without a model as unset (inert level, no phantom default). */
 export interface ModelSlot {
+	/** Native Pi preference. Absent leaves Pi/environment behavior unchanged. */
+	cacheRetention?: CacheRetention;
 	/** The model swap: both coordinates or neither. */
 	model?: { provider: string; id: string };
 	/** The thinking budget swap. */
@@ -348,7 +353,12 @@ export interface AgentSettings {
 	 *  pins the preference (e.g. when BOTH keys are present); the chosen
 	 *  engine must still have its key, else search is honestly unavailable.
 	 *  Absent + no key = unavailable (no silent fallback, no default). */
-	search?: { engine?: SearchEngineId };
+	search?: {
+		engine?: SearchEngineId;
+		/** Server fork: web_fetch retries pages Readability cannot parse via
+		 *  the r.jina.ai reader (the URL goes to Jina). Absent = off. */
+		jinaFallback?: boolean;
+	};
 	/** Prober graph tools (wave 7, owner ruling 2026-09-23): read-only
 	 *  knowledge-graph views for the prober agent — a session list +
 	 *  per-session propositions with understanding levels. Its SUBJECT
@@ -589,8 +599,13 @@ function sanitizeRoleOverride(raw: unknown): RoleModelOverride | undefined {
 function sanitizeModels(raw: Record<string, unknown>): ModelsSettings {
 	const out: ModelsSettings = {};
 	for (const slot of MODEL_SLOTS) {
-		const cleaned = sanitizeRoleOverride(raw[slot]);
-		if (cleaned) out[slot] = cleaned;
+		const cleaned: ModelSlot = sanitizeRoleOverride(raw[slot]) ?? {};
+		const value = raw[slot];
+		if (value && typeof value === "object" && !Array.isArray(value)) {
+			const retention = (value as Record<string, unknown>).cacheRetention;
+			if (CACHE_RETENTIONS.includes(retention as CacheRetention)) cleaned.cacheRetention = retention as CacheRetention;
+		}
+		if (Object.keys(cleaned).length) out[slot] = cleaned;
 	}
 	return out;
 }
@@ -698,8 +713,11 @@ function sanitizeAgent(raw: Record<string, unknown>): AgentSettings {
 	// the write side's parser is strict — a stale client can't brick the
 	// record, it just loses the pin and auto-detection resumes).
 	if (raw.search !== null && typeof raw.search === "object" && !Array.isArray(raw.search)) {
-		const engine = (raw.search as Record<string, unknown>).engine;
-		if (engine === "tavily" || engine === "brave" || engine === "searxng") out.search = { engine };
+		const { engine, jinaFallback } = raw.search as Record<string, unknown>;
+		const search: NonNullable<AgentSettings["search"]> = {};
+		if (engine === "tavily" || engine === "brave" || engine === "searxng") search.engine = engine;
+		if (typeof jinaFallback === "boolean") search.jinaFallback = jinaFallback;
+		if (Object.keys(search).length) out.search = search;
 	}
 	// Prober graph tools (wave 7): its own agent-section subsection —
 	// lenient read side (a bad shape drops the key and the default ON

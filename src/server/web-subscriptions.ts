@@ -1,7 +1,6 @@
 /** Persistent Node web/dev owner. Never imported by client code. Desktop keeps
  * its existing main-process owner; a broken desktop IPC channel cannot fall
  * back to these files. One server process must own each configured auth dir. */
-import { CHATGPT_SERVER_MODE_NOTICE, serverMode } from "../core/server-mode.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -48,6 +47,9 @@ export function createWebSubscriptionOwner(options: {
 	const launches = new AsyncLocalStorage<string[]>();
 	const actions = new Map<string, BrowserAction>();
 	let chatGPTLaunch = 0;
+	/** The pending ChatGPT sign-in's loopback redirect_uri (server fork: the
+	 *  callback relay, src/server/chatgpt-callback-relay.ts). */
+	let chatGPTRedirect: string | undefined;
 	const openExternal = async (target: string) => {
 		const captured = launches.getStore();
 		if (!captured || new URL(target).protocol !== "https:") throw new Error("No browser action is pending.");
@@ -71,6 +73,7 @@ export function createWebSubscriptionOwner(options: {
 				: subscriptionControl({ ...command, providerId }, native));
 			let browserAction: string | undefined;
 			const target = targets[0];
+			if (target && providerId === "chatgpt") chatGPTRedirect = new URL(target).searchParams.get("redirect_uri") ?? undefined;
 			if (target) {
 				const scope = providerId === "chatgpt" ? "chatgpt" : `${providerId}:${command.attemptId}:${command.actionId}`;
 				for (const [id, action] of actions) if (action.expires <= Date.now() || action.scope === scope) actions.delete(id);
@@ -91,6 +94,7 @@ export function createWebSubscriptionOwner(options: {
 			if (action.expires <= Date.now() || !await action.current()) return;
 			return action.target;
 		},
+		chatGPTRedirect: () => chatGPTRedirect,
 		close() { actions.clear(); chatgpt.close(); native.close(); },
 	};
 }
@@ -124,11 +128,5 @@ configureWebSubscriptionRuntime(webSubscriptionRequest);
 export async function webSubscriptionStatus(): Promise<{ chatgpt: ChatGPTStatus; native: NativeSubscriptionSnapshot["statuses"] }> {
 	const owner = webSubscriptionOwner();
 	const [chatgpt, native] = await Promise.all([owner.chatgpt.status(), owner.native.status()]);
-	if (serverMode()) {
-		return {
-			chatgpt: { available: false, pending: false, allowBackgroundUse: false, activeId: null, accounts: [], error: null, serverUnavailable: CHATGPT_SERVER_MODE_NOTICE },
-			native,
-		};
-	}
 	return { chatgpt, native };
 }

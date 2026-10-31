@@ -117,6 +117,7 @@ for (const value of [true, false]) test(`untouched initial sign-in preserves exi
  const f = fixture(disconnected(value)); await mount(); await click(byTest("chatgpt-login"));
  assert.equal(toggle().getAttribute("aria-checked"), String(value)); await click(byTest("chatgpt-proceed"));
  assert(document.body.textContent?.includes("Waiting for browser sign-in")); assert.deepEqual(f.calls.consent, []);
+ assert(byTest("chatgpt-callback-paste"), "server fork: the callback paste field shows while sign-in is pending");
  await act(async () => f.complete()); assert.deepEqual(f.calls.consent, []); assert.equal(f.status.allowBackgroundUse, value);
  assert(!document.querySelector('[data-testid="chatgpt-account-dialog"]')); assert(button("Manage…"));
 });

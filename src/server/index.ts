@@ -8,7 +8,11 @@ export * from "./chat-handler.ts";
 export * from "./events-stream.ts";
 export * from "./chats.ts";
 export * from "./graph.ts";
+export * from "./source-organization.ts";
+export * from "./source-deletion.ts";
 export { NotesImportError } from "../agent/subagents/extraction.ts";
+export { convertPdf } from "../agent/subagents/pdf-ops.ts";
+export { joinPages } from "../agent/subagents/pdf-markdown.ts";
 export * from "./commit-positions.ts";
 export * from "./jobs.ts";
 export * from "./stores.ts";
@@ -47,7 +51,7 @@ export { subscriptionControlsResponse, subscriptionBrowserResponse } from "./web
 export { sessionCost } from "./pricing.ts";
 export { claudeCodeInstallationResponse } from "./claude-code.ts";
 export { libraryUploadResponse, libraryUploadStatus } from "./library-upload.ts";
-export { serverMode } from "../core/server-mode.ts";
+export { chatGPTCallbackRelayResponse } from "./chatgpt-callback-relay.ts";
 // The custom endpoint module (registers into piModels() + probes for models).
 // No import side effects; the boot sync lives in stores.ts.
 export * from "./custom-provider.ts";

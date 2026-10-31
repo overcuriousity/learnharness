@@ -13,9 +13,6 @@ export interface ChatGPTStatus {
 	}[];
 	error: string | null;
 	catalogError?: string | null;
-	/** Server mode: ChatGPT cannot be connected here; the UI shows this one
-	 *  line instead of the connection row. */
-	serverUnavailable?: string;
 }
 export interface ChatGPTControlBridge {
 	status(): Promise<ChatGPTStatus>;
