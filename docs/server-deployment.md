@@ -82,7 +82,7 @@ LH_EGRESS_LOG=/tmp/egress.jsonl NODE_OPTIONS="--import=/opt/learnharness/src/scr
 node scripts/egress-audit.mjs summarize /tmp/egress.jsonl   # exit 1 if any external destination
 ```
 
-Idle, the server makes none. Outbound traffic happens only when you cause it: model calls, web searches (to your SearXNG, or Tavily/Brave when chosen), pages the researcher fetches, and dictation (Deepgram, only with a key and only when you dictate).
+Idle, the server makes none. Outbound traffic happens only when you cause it: model calls, web searches (to your SearXNG, or Tavily/Brave when chosen), pages the researcher fetches (plus r.jina.ai for pages it cannot parse, only with Settings → Agent → Jina reader fallback on), and dictation (Deepgram, only with a key and only when you dictate).
 
 ## Pulling upstream releases
 

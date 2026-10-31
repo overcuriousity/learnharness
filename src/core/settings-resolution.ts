@@ -83,7 +83,7 @@ export interface EffectiveSettings {
 		/** The search-engine preference as stored (search wave, 2026-09-20):
 		 *  passthrough delta — engine resolution (pin → auto → unavailable)
 		 *  lives in server/search.ts, where keys are visible. */
-		search: { engine?: SearchEngineId };
+		search: { engine?: SearchEngineId; jinaFallback?: boolean };
 		/** Prober graph tools (wave 7): passthrough delta as stored —
 		 * absent/undefined enabled = ON; consumers use graphToolsEnabled. */
 		graphTools: { enabled?: boolean };

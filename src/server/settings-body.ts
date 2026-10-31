@@ -189,12 +189,18 @@ export function parseAgentSettingsBody(body: unknown): SettingsBodyResult<AgentS
 	if (raw.search !== undefined) {
 		const search = asRecord(raw.search);
 		if (!search) return { ok: false, error: "search must be an object" };
+		const parsed: { engine?: "tavily" | "brave" | "searxng"; jinaFallback?: boolean } = {};
 		if (search.engine !== undefined) {
 			if (search.engine !== "tavily" && search.engine !== "brave" && search.engine !== "searxng") {
 				return { ok: false, error: 'search.engine must be "tavily", "brave" or "searxng"' };
 			}
-			settings.search = { engine: search.engine };
+			parsed.engine = search.engine;
 		}
+		if (search.jinaFallback !== undefined) {
+			if (typeof search.jinaFallback !== "boolean") return { ok: false, error: "search.jinaFallback must be a boolean" };
+			parsed.jinaFallback = search.jinaFallback;
+		}
+		if (Object.keys(parsed).length) settings.search = parsed;
 	}
 	// Prober graph tools (wave 7, owner ruling 2026-09-23): an agent-section
 	// subsection, not a tool-toggles key — the mechanism is agent capability

@@ -353,7 +353,12 @@ export interface AgentSettings {
 	 *  pins the preference (e.g. when BOTH keys are present); the chosen
 	 *  engine must still have its key, else search is honestly unavailable.
 	 *  Absent + no key = unavailable (no silent fallback, no default). */
-	search?: { engine?: SearchEngineId };
+	search?: {
+		engine?: SearchEngineId;
+		/** Server fork: web_fetch retries pages Readability cannot parse via
+		 *  the r.jina.ai reader (the URL goes to Jina). Absent = off. */
+		jinaFallback?: boolean;
+	};
 	/** Prober graph tools (wave 7, owner ruling 2026-09-23): read-only
 	 *  knowledge-graph views for the prober agent — a session list +
 	 *  per-session propositions with understanding levels. Its SUBJECT
@@ -708,8 +713,11 @@ function sanitizeAgent(raw: Record<string, unknown>): AgentSettings {
 	// the write side's parser is strict — a stale client can't brick the
 	// record, it just loses the pin and auto-detection resumes).
 	if (raw.search !== null && typeof raw.search === "object" && !Array.isArray(raw.search)) {
-		const engine = (raw.search as Record<string, unknown>).engine;
-		if (engine === "tavily" || engine === "brave" || engine === "searxng") out.search = { engine };
+		const { engine, jinaFallback } = raw.search as Record<string, unknown>;
+		const search: NonNullable<AgentSettings["search"]> = {};
+		if (engine === "tavily" || engine === "brave" || engine === "searxng") search.engine = engine;
+		if (typeof jinaFallback === "boolean") search.jinaFallback = jinaFallback;
+		if (Object.keys(search).length) out.search = search;
 	}
 	// Prober graph tools (wave 7): its own agent-section subsection —
 	// lenient read side (a bad shape drops the key and the default ON

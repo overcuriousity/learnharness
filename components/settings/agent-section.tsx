@@ -170,12 +170,22 @@ export function composeSearchEngine(
 	agent: AgentSettings | undefined,
 	engine: (typeof SEARCH_ENGINES)[number] | null,
 ): AgentSettings {
-	if (engine === null) {
-		if (!agent?.search) return { ...agent };
-		const { search: _drop, ...rest } = agent;
-		return { ...rest } as AgentSettings;
-	}
-	return { ...agent, search: { engine } };
+	return withSearch(agent, { ...(engine ? { engine } : {}), ...(agent?.search?.jinaFallback ? { jinaFallback: true } : {}) });
+}
+
+/** Server fork: the Jina Reader fallback toggle (agent.search.jinaFallback,
+ *  absent = off). Keeps the engine pin; off drops the key. */
+export const JINA_FALLBACK_HINT = "When a page can't be read locally (often JavaScript-heavy pages), send its URL to r.jina.ai to read it.";
+export function composeJinaFallback(agent: AgentSettings | undefined, on: boolean): AgentSettings {
+	return withSearch(agent, { ...(agent?.search?.engine ? { engine: agent.search.engine } : {}), ...(on ? { jinaFallback: true } : {}) });
+}
+
+/** Set agent.search, dropping the key when nothing is left in it. */
+function withSearch(agent: AgentSettings | undefined, search: NonNullable<AgentSettings["search"]>): AgentSettings {
+	if (Object.keys(search).length) return { ...agent, search };
+	if (!agent?.search) return { ...agent };
+	const { search: _drop, ...rest } = agent;
+	return { ...rest } as AgentSettings;
 }
 
 /** The indicator under a row whose override IS the version in use (owner
@@ -862,6 +872,13 @@ export function AgentSection({
 						</SettingsRow>
 					);
 				})()}
+				<SettingsRow label="Jina reader fallback" hint={JINA_FALLBACK_HINT} testid="jina-fallback-row">
+					<Toggle
+						checked={agent?.search?.jinaFallback === true}
+						label="Jina reader fallback"
+						onChange={(on) => onSectionChange(composeJinaFallback(agent, on))}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 
 			<SettingsGroup label="Context" testid="group-context">
