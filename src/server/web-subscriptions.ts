@@ -1,7 +1,6 @@
 /** Persistent Node web/dev owner. Never imported by client code. Desktop keeps
  * its existing main-process owner; a broken desktop IPC channel cannot fall
  * back to these files. One server process must own each configured auth dir. */
-import { CHATGPT_SERVER_MODE_NOTICE, serverMode } from "../core/server-mode.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -124,11 +123,5 @@ configureWebSubscriptionRuntime(webSubscriptionRequest);
 export async function webSubscriptionStatus(): Promise<{ chatgpt: ChatGPTStatus; native: NativeSubscriptionSnapshot["statuses"] }> {
 	const owner = webSubscriptionOwner();
 	const [chatgpt, native] = await Promise.all([owner.chatgpt.status(), owner.native.status()]);
-	if (serverMode()) {
-		return {
-			chatgpt: { available: false, pending: false, allowBackgroundUse: false, activeId: null, accounts: [], error: null, serverUnavailable: CHATGPT_SERVER_MODE_NOTICE },
-			native,
-		};
-	}
 	return { chatgpt, native };
 }

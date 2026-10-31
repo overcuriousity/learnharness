@@ -1,5 +1,4 @@
 import type { Model } from "@earendil-works/pi-ai";
-import { serverMode } from "../core/server-mode.ts";
 import { onWebSubscriptionPacket, webSubscriptionRequest, webSubscriptionsEnabled } from "./subscription-runtime.ts";
 import type { ChatGPTStatus } from "../core/contracts/chatgpt.ts";
 import type { AdmissionScope, NoDispatchKind } from "./chatgpt-request-cycle.ts";
@@ -81,7 +80,7 @@ export function chatGPTRequest<T>(op: "status" | "models" | "lease", fields: Rec
  });
 }
 export function chatGPTStatus(): ChatGPTStatus { return bridge().status; }
-export function chatGPTConnected(): boolean { if (serverMode()) return false; const s = chatGPTStatus(); return runtimeConnected() && s.available && s.accounts.some((a) => a.id === s.activeId && a.connected && a.planEnabled === true); }
+export function chatGPTConnected(): boolean { const s = chatGPTStatus(); return runtimeConnected() && s.available && s.accounts.some((a) => a.id === s.activeId && a.connected && a.planEnabled === true); }
 export function chatGPTBackgroundAllowed(): boolean { const s = chatGPTStatus(); return chatGPTConnected() && s.allowBackgroundUse === true; }
 export function onChatGPTChange(listener: () => void): () => void { bridge().listeners.add(listener); return () => { bridge().listeners.delete(listener); }; }
 export function chatGPTModels(): Model<"openai-responses">[] { return bridge().models; }

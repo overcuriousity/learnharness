@@ -2,7 +2,6 @@ import { inspectClaudeInstallation } from "../agent/claude-code/installation.ts"
 import { initAuthEnv } from "./keys.ts";
 import { subscriptionRequestOrigin } from "./web-subscription-http.ts";
 import { claudeCodeEnabled } from "./claude-code-config.ts";
-import { serverMode } from "../core/server-mode.ts";
 
 /** The Settings status seam: initialize provenance before any child env is copied. */
 export async function claudeCodeInstallationStatus() {
@@ -17,10 +16,9 @@ export async function claudeCodeInstallationResponse(
 	inspect = claudeCodeInstallationStatus,
 	enabled = claudeCodeEnabled,
 ): Promise<Response> {
-	const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
-	if (serverMode()) return Response.json({ error: "Not found." }, { status: 404, headers });
 	const origin = subscriptionRequestOrigin(request);
 	const supplied = request.headers.get("origin");
+	const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 	if (request.method !== "GET" || !origin
 		|| request.headers.get("x-learnharness-claude-code") !== "1"
 		|| request.headers.get("sec-fetch-site") === "cross-site"
