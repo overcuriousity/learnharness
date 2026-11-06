@@ -3,6 +3,9 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { serverExecute } from "../tool-execute.ts";
 import type { JobRecord } from "../../core/contracts.ts";
 import type { JobStore } from "../../core/ports.ts";
+import { checkLearnerImage } from "./learner-image.ts";
+import { resolveLibraryPath } from "./fs-shared.ts";
+import { libraryAvailable } from "./library-tools.ts";
 
 /**
  * Async sub-agent job tools (vision §2.5; W2/W6 kinds + the pi-model
@@ -53,9 +56,21 @@ export const visualInputSchema = Type.Object({
 	brief: Type.String({
 		description:
 			"Precise brief for ONE static figure: exactly what it must show — coordinates, labels, proportions, orientation. " +
-			"The maker sees NOTHING else of the lesson; a wrong or vague brief produces a wrong figure.",
+			"The maker sees NOTHING else of the lesson; a wrong or vague brief produces a wrong figure. " +
+			"With an image: which features to mark and what each label says.",
 	}),
+	image: Type.Optional(
+		Type.String({
+			description:
+				"Path to one of the learner's image files (jpg, png, gif, webp, bmp) to annotate — the maker draws on top of it " +
+				"instead of drawing from scratch.",
+		}),
+	),
 });
+
+/** The visual schema without `image` — offered when no library folder is
+ *  configured (jobTools). Stored inputs still validate against the full one. */
+const visualBriefOnlySchema = Type.Object({ brief: visualInputSchema.properties.brief });
 
 export const pdfInputSchema = Type.Object({
 	path: Type.String({ description: "Path to the learner's PDF (relative or absolute), exactly as they gave it." }),
@@ -113,6 +128,10 @@ const VISUAL_DESCRIPTION =
 	"function plots, physical layouts. For flows/relations/taxonomies write mermaid inline instead. " +
 	"The call is ASYNC and fire-and-forget — it resolves immediately and your turn continues; the verified figure arrives later " +
 	"as a new message.";
+/** The visual description's image sentence: only with a library folder,
+ *  the only place a learner image can come from (fs-shared.ts). */
+const VISUAL_IMAGE_SENTENCE =
+	"Pass `image` (a learner image file in the library folder) to have the maker annotate that picture — arrows, outlines, labels — instead. ";
 const PDF_DESCRIPTION =
 	"Dispatch a background sub-agent that READS a learner-provided PDF on your behalf (triage, targeted extraction, visual page " +
 	"reading for equations and diagrams) and returns a brief with page citations. Use it when the learner gives you a PDF path " +
@@ -129,6 +148,7 @@ const PDF_DESCRIPTION =
  * existing user-toggle filtering still applies outside this registry.
  */
 export function jobTools(ctx: JobToolContext): Record<string, AgentTool<any>> {
+	const library = libraryAvailable();
 	return {
 		research: {
 			name: "research",
@@ -149,18 +169,29 @@ export function jobTools(ctx: JobToolContext): Record<string, AgentTool<any>> {
 		visual: {
 			name: "visual",
 			label: "visual",
-			description: VISUAL_DESCRIPTION,
-			parameters: visualInputSchema,
-			execute: serverExecute("visual", visualInputSchema, (input, { toolCallId }) =>
-				dispatch(ctx, "visual", toolCallId, VISUAL_ACK, input),
-			),
+			// Without a library there is no learner image to annotate: the
+			// `image` option is left out of the schema and the description.
+			description: library ? VISUAL_DESCRIPTION.replace("The call is ASYNC", `${VISUAL_IMAGE_SENTENCE}The call is ASYNC`) : VISUAL_DESCRIPTION,
+			parameters: library ? visualInputSchema : visualBriefOnlySchema,
+			// An unusable image path fails the CALL (no job is created), so the
+			// teacher corrects the path in the same turn.
+			execute: serverExecute("visual", visualInputSchema, async (input, { toolCallId, signal }) => {
+				if (!ctx.jobStore.findJobByToolCallId(ctx.chatId, toolCallId) && input.image !== undefined) await checkLearnerImage(input.image);
+				signal?.throwIfAborted();
+				return dispatch(ctx, "visual", toolCallId, VISUAL_ACK, input);
+			}),
 		},
 		pdf: {
 			name: "pdf",
 			label: "pdf",
 			description: PDF_DESCRIPTION,
 			parameters: pdfInputSchema,
-			execute: serverExecute("pdf", pdfInputSchema, (input, { toolCallId }) => dispatch(ctx, "pdf", toolCallId, PDF_ACK, input)),
+			execute: serverExecute("pdf", pdfInputSchema, async (input, { toolCallId }) => {
+				// Admission uses the current boundary; the queued reader checks
+				// again at job start. Preserve raw args/history and replay IDs.
+				if (!ctx.jobStore.findJobByToolCallId(ctx.chatId, toolCallId)) await resolveLibraryPath(input.path);
+				return dispatch(ctx, "pdf", toolCallId, PDF_ACK, input);
+			}),
 		},
 	};
 }

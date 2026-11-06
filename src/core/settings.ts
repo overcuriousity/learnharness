@@ -33,7 +33,7 @@ import { AUTH_PROVIDER_KEYS } from "./auth-keys.ts";
 import { CLAUDE_CODE_PROVIDER } from "./contracts/claude-code.ts";
 import type { ModelRole } from "../../config.ts";
 import type { ChatSettings } from "./contracts/chat.ts";
-import type { SearchEngineId } from "./search.ts";
+import { isSearchEngineId, type SearchEngineId } from "./search.ts";
 import { isDictationLanguage, type DictationLanguage } from "./dictation.ts";
 
 /** The schema version this code understands. Bump ONLY for breaking shape
@@ -715,7 +715,7 @@ function sanitizeAgent(raw: Record<string, unknown>): AgentSettings {
 	if (raw.search !== null && typeof raw.search === "object" && !Array.isArray(raw.search)) {
 		const { engine, jinaFallback } = raw.search as Record<string, unknown>;
 		const search: NonNullable<AgentSettings["search"]> = {};
-		if (engine === "tavily" || engine === "brave" || engine === "searxng") search.engine = engine;
+		if (isSearchEngineId(engine)) search.engine = engine;
 		if (typeof jinaFallback === "boolean") search.jinaFallback = jinaFallback;
 		if (Object.keys(search).length) out.search = search;
 	}

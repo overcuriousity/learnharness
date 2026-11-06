@@ -14,6 +14,10 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), "lh-job-delivery-"));
 process.env.LH_DATA_DIR = path.join(directory, "data");
 process.env.LH_AUTH_FILE = path.join(directory, "auth.json");
 fs.writeFileSync(process.env.LH_AUTH_FILE, "{}");
+// Server fork: file paths resolve inside the library folder (fs-shared.ts),
+// which must not overlap the data/auth folders.
+const library = fs.mkdtempSync(path.join(os.tmpdir(), "lh-job-delivery-library-"));
+process.env.LH_LIBRARY_DIR = library;
 const { stores } = await import("../src/server/stores.ts");
 const { jobTools } = await import("../src/agent/tools/jobs.ts");
 const { createJobRunner, researchModelOverride } = await import("../src/agent/subagents/runner.ts");
@@ -70,7 +74,10 @@ afterEach(() => {
 	}
 	setTurnRunner(async () => 500);
 });
-after(() => fs.rmSync(directory, { recursive: true, force: true }));
+after(() => {
+	fs.rmSync(directory, { recursive: true, force: true });
+	fs.rmSync(library, { recursive: true, force: true });
+});
 
 for (const [kind, input] of Object.entries({
 	research: { question: "Saved research question", context: "Saved context" },

@@ -5,8 +5,8 @@
  *
  * { available, engine, reason } — never a key, never a secret: `engine` is
  * the ACTIVE engine when live (auto-detection or the explicit pin), and
- * `reason` is the one-line state explanation ("set a Tavily or Brave
- * search API key, or SEARXNG_URL", or the pinned-engine-key-missing case).
+ * `reason` is the one-line state explanation (missing SearXNG URL or
+ * search API key, or the pinned-engine-key-missing case).
  */
 
 import { searchStatus } from "@/src/server";

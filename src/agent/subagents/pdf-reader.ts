@@ -167,21 +167,21 @@ export async function runPdfReaderAgent(
 	input: PdfReaderInput,
 	opts: PdfReaderOptions = {},
 ): Promise<PdfResult> {
-	const headless = opts.headless ?? getHeadless();
 	const maxIterations = opts.maxIterations ?? MAX_ITERATIONS;
-	let pdfPath: string;
+	let pdfPath = input.path;
+	let openError: string | null;
+	// Source denial (outside the library, protected, dotenv) is an ordinary
+	// upfront PDF failure, before parsing, rendering or any model request.
 	try {
 		pdfPath = await resolveLibraryPath(input.path);
+		openError = await probeReadable(pdfPath);
 	} catch (err) {
-		return { path: input.path, question: input.question, brief: `PDF failed: ${err instanceof Error ? err.message : String(err)}`, pagesRead: [], pagesConsulted: [] };
+		openError = err instanceof Error ? err.message : String(err);
 	}
-
-	// Deterministic upfront failure: unreadable / unparseable
-	// for renders — the brief never starts on a broken source.
-	const openError = await probeReadable(pdfPath);
 	if (openError) {
 		return { path: pdfPath, question: input.question, brief: `PDF failed: ${openError}`, pagesRead: [], pagesConsulted: [] };
 	}
+	const headless = opts.headless ?? getHeadless();
 	// No Chrome gate (Wave E, 2026-10-10): pdf_render is native now
 	// (pdfjs paints into @napi-rs/canvas in-process) — the whole pdf-reader
 	// runs browser-free; text tools always worked without one.

@@ -147,10 +147,22 @@ describe("AgentSection (thin SSR)", () => {
 			<AgentSection agent={{ search: { engine: "tavily" } }} models={undefined} graph={undefined} onSectionChange={() => {}} onModelsChange={() => {}} />,
 		);
 		assert.ok(html2.includes("Tavily"), "pinned engine visible in the trigger");
+		const exa = renderToStaticMarkup(
+			<AgentSection agent={{ search: { engine: "exa" } }} models={undefined} graph={undefined} onSectionChange={() => {}} onModelsChange={() => {}} />,
+		);
+		assert.ok(exa.includes("Exa"), "an Exa pin retains its label in the trigger");
 		const html3 = renderToStaticMarkup(
+			<AgentSection agent={{ search: { engine: "firecrawl" } }} models={undefined} graph={undefined} onSectionChange={() => {}} onModelsChange={() => {}} />,
+		);
+		assert.ok(html3.includes("Firecrawl"), "a Firecrawl pin reads by its label");
+		const ollama = renderToStaticMarkup(
+			<AgentSection agent={{ search: { engine: "ollama" } }} models={undefined} graph={undefined} onSectionChange={() => {}} onModelsChange={() => {}} />,
+		);
+		assert.ok(ollama.includes("Ollama"), "an Ollama pin reads by its label");
+		const searx = renderToStaticMarkup(
 			<AgentSection agent={{ search: { engine: "searxng" } }} models={undefined} graph={undefined} onSectionChange={() => {}} onModelsChange={() => {}} />,
 		);
-		assert.ok(html3.includes("SearXNG"), "a SearXNG pin shows in the trigger too");
+		assert.ok(searx.includes("SearXNG"), "a SearXNG pin shows in the trigger too");
 	});
 
 	it("the Jina reader fallback row sits right under Search engine, off by default (server fork)", () => {
