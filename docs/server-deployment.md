@@ -4,7 +4,7 @@ One trusted user, one Node process bound to `127.0.0.1`, nginx in front for TLS.
 
 ## Install
 
-Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a SearXNG instance (or a Tavily/Brave API key). Build on the server itself (or the same OS/CPU): the standalone output contains native binaries.
+Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a SearXNG instance (or a Tavily, Brave, Exa, Firecrawl or Ollama API key). Build on the server itself (or the same OS/CPU): the standalone output contains native binaries.
 
 1. Create the service user and folders:
    ```bash
@@ -23,7 +23,7 @@ Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a Se
 4. Install Chromium for demo verification (e.g. Debian: `sudo apt install chromium`, binary `/usr/bin/chromium`). A snap-packaged Chromium does not run inside the unit's sandbox; use a native package.
 5. Install the unit: copy `deploy/learnharness.service` to `/etc/systemd/system/`, set `LH_PUBLIC_ORIGIN` and `CHROME_PATH`, then `sudo systemctl daemon-reload && sudo systemctl enable --now learnharness`.
 6. Install nginx: adapt `deploy/nginx.conf.example` (host name, certificate paths), then `sudo nginx -t && sudo systemctl reload nginx`.
-7. Open the site, add a model key under Settings → Providers, and set `SEARXNG_URL` (or a Tavily/Brave key) under Providers → Search.
+7. Open the site, add a model key under Settings → Providers, and set `SEARXNG_URL` (or another engine's key) under Providers → Search.
 
 **Updating:** `git pull` (or merge an upstream release, below), repeat steps 2–3, `sudo systemctl restart learnharness`.
 
@@ -39,7 +39,7 @@ Requires Linux, Node.js 26 (the version CI uses) and nginx; for web search, a Se
 | `LH_PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://learn.example.org`. Required behind TLS: same-origin checks would otherwise see `http:` and refuse (403). |
 | `CHROME_PATH` | A Chrome/Chromium binary for demo verification. Without one, demo jobs fail with a clear message. Diagrams do not need it (they render natively). |
 | `HOME` | The service user's home, `/var/lib/learnharness/home`: the Claude Code CLI's binary, configuration and sign-in live here. |
-| `SEARXNG_URL`, `SEARXNG_AUTH_HEADER` | SearXNG search; settable in the environment or in Settings → Providers → Search. The header is the full `Authorization` value (e.g. `Basic …`) and is never shown again. `TAVILY_API_KEY` / `BRAVE_API_KEY` work the same way. |
+| `SEARXNG_URL`, `SEARXNG_AUTH_HEADER` | SearXNG search; settable in the environment or in Settings → Providers → Search. The header is the full `Authorization` value (e.g. `Basic …`) and is never shown again. `TAVILY_API_KEY`, `BRAVE_API_KEY`, `EXA_API_KEY`, `FIRECRAWL_API_KEY` and `OLLAMA_API_KEY` work the same way. |
 
 ## Subscriptions
 
@@ -62,7 +62,7 @@ Then switch it on under Settings → Providers → External CLI → Claude Code 
 
 - Enable JSON output in the instance's `settings.yml`: `search: formats: [html, json]`. Otherwise every search answers 403.
 - The limiter (bot detection) can block or rate-limit (429) a server-side client. For a private instance, turn it off, or add the LearnHarness host to the limiter's pass list.
-- Engines: Tavily, Brave and SearXNG. Each becomes live when its key (SearXNG: its URL) is set. With several set and no choice in Settings → Agent → Search engine, the order is Tavily → Brave → SearXNG; pick SearXNG there to keep searches on your own instance.
+- Engines: SearXNG, Tavily, Brave, Exa, Firecrawl and Ollama (hosted search at ollama.com, not a local model server). Each becomes live when its key (SearXNG: its URL) is set. With several set and no choice in Settings → Agent → Search engine, the order is SearXNG → Tavily → Brave → Exa → Firecrawl → Ollama, so a configured SearXNG keeps searches on your own instance. An engine picked there is used alone: if its key is missing, search is unavailable rather than falling back.
 - With no engine configured, web search reports "not configured"; research still runs on pages it fetches directly.
 
 ## Backups
@@ -82,7 +82,7 @@ LH_EGRESS_LOG=/tmp/egress.jsonl NODE_OPTIONS="--import=/opt/learnharness/src/scr
 node scripts/egress-audit.mjs summarize /tmp/egress.jsonl   # exit 1 if any external destination
 ```
 
-Idle, the server makes none. Outbound traffic happens only when you cause it: model calls, web searches (to your SearXNG, or Tavily/Brave when chosen), pages the researcher fetches (plus r.jina.ai for pages it cannot parse, only with Settings → Agent → Jina reader fallback on), and dictation (Deepgram, only with a key and only when you dictate).
+Idle, the server makes none. Outbound traffic happens only when you cause it: model calls, web searches (to your SearXNG, or to the hosted engine in use: api.tavily.com, api.search.brave.com, api.exa.ai, api.firecrawl.dev or ollama.com), pages the researcher fetches (plus r.jina.ai for pages it cannot parse, only with Settings → Agent → Jina reader fallback on), and dictation (Deepgram, only with a key and only when you dictate).
 
 ## Pulling upstream releases
 

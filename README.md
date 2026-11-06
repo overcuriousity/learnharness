@@ -11,7 +11,7 @@
 <p align="center">
   <a href="docs/server-deployment.md">Deploy</a> ·
   <a href="#how-it-works">How it works</a> ·
-  <a href="docs/development.md">Documentation</a> ·
+  <a href="docs/README.md">Documentation</a> ·
   <a href="https://github.com/amosblomqvist/learnharness/issues">Issues</a> ·
   <a href="https://discord.gg/5tCHHQEB2e">Discord</a>
 </p>
@@ -31,7 +31,9 @@ Instead of just giving you an explanation, it uses your answers and thinking to 
 
 **Think out loud.** The thinking fields let you explain your reasoning, uncertainties, and reactions in your own words. This is how the agent gets a detailed picture rather than just a record of right and wrong answers. You can type or use dictation.
 
-The agent can also research questions in the background, create visual explanations, and build interactive demonstrations.
+**Bring your files.** In the desktop app, attach PDFs, photos, or any other file with the paperclip, or drag them in. The file stays where it is: the message carries its path, and the agent reads it from there.
+
+The agent can also research questions in the background, create visual explanations, show your own images in the lesson and mark them up with arrows and labels, and build interactive demonstrations.
 
 ## Knowledge that carries forward
 
@@ -45,7 +47,7 @@ Future teaching sessions can read the graph instead of starting from scratch. Pr
 
 This fork runs LearnHarness as a self-hosted web app: one Node process behind nginx, for one user. See the [server deployment guide](docs/server-deployment.md).
 
-Add your provider API key and choose your models, then start a session with what you want to understand. LearnHarness supports 30+ provider options, including OpenAI, Anthropic, Google, DeepSeek, and OpenRouter. Web search uses your own SearXNG instance or a Tavily/Brave key; dictation uses an optional Deepgram key.
+Add your provider API key and choose your models, then start a session with what you want to understand. LearnHarness supports 30+ provider options, including OpenAI, Anthropic, Google, DeepSeek, and OpenRouter. Web search uses your own SearXNG instance or a Tavily, Brave, Exa, Firecrawl, or Ollama key (Ollama search is its hosted service, not a local model server); dictation uses an optional Deepgram key.
 
 **Dictation:** Create a [Deepgram API key](https://console.deepgram.com/) with the **Member role or higher** ([required for token minting](https://developers.deepgram.com/reference/auth/tokens/grant)) and add it under **Settings → Providers → Dictation**. Choose the language below the key; **Multilingual** supports automatic recognition and mixed-language speech. A `403 Insufficient permissions` error during token minting can indicate an insufficient key role.
 
@@ -59,12 +61,12 @@ Add your provider API key and choose your models, then start a session with what
 ## Development and support
 
 ```bash
-npm install
+npm ci
 npm run dev        # http://localhost:3000
-npm test           # deterministic, no LLM, no network
+npm test           # fixtures and fake providers
 ```
 
-See the [development guide](docs/development.md), [architecture](docs/architecture.md), [keyboard reference](docs/keyboard.md), and [server deployment guide](docs/server-deployment.md).
+See the [documentation index](docs/README.md) for all guides, [development](docs/development.md) for setup and checks, [architecture](docs/architecture.md) for the runtime, [keyboard shortcuts](docs/keyboard.md), and the [server deployment guide](docs/server-deployment.md).
 
 Questions, bug reports, and feature requests: [GitHub Issues](https://github.com/amosblomqvist/learnharness/issues).
 

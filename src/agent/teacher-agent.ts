@@ -16,11 +16,11 @@ import {
 } from "./tools.ts";
 import { practiceTools, type PracticeToolContext } from "./tools/practice.ts";
 import { healToolRecord, withArgumentHeal } from "./tools/heal.ts";
-import { sendToUserTool } from "./tools/send-to-user.ts";
+import { sendToUserApplies, sendToUserTool } from "./tools/send-to-user.ts";
+import { makeNarrationGuard, narrationGuardApplies, SEND_TO_USER_DELIVERY_RULE } from "./narration-guard.ts";
 import { createReadTool, readTool } from "./tools/read.ts";
-import { LEARNER_FILES_SEGMENT } from "./tools/fs-shared.ts";
+import { LEARNER_FILES_SEGMENT, LEARNER_IMAGES_SEGMENT } from "./tools/fs-shared.ts";
 import { libraryAvailable } from "./tools/library-tools.ts";
-import { CLAUDE_CODE_PROVIDER } from "./claude-code/constants.ts";
 import { quizInputObject, quizInputProblems } from "../core/question-core.ts";
 import { QUESTION_TOOLS, type EnabledTools } from "../core/pending.ts";
 import { toLlmMessages, nativeInputCause, PRACTICE_PROBLEM_TOOL } from "../core/native-messages.ts";
@@ -28,11 +28,11 @@ import type { ChatGPTRequestCycle } from "./chatgpt-request-cycle.ts";
 import { usageWasAdmitted } from "./subscription-request-cycle.ts";
 
 /**
- * The two teaching-side agents (docs/probe-teach-split.md): the PROBER and
+ * The two teaching-side agents (docs/archive/probe-teach-split.md): the PROBER and
  * the TEACHER. Same transcript, different prompts and tool sets; the
  * chat-handler constructs ONE per request off the transcript's seam
  * (probe_done = teacher) — the STATELESS per-turn engine (docs/
- * pi-engine-swap.md §2): the persisted record is the source of truth, the
+ * docs/archive/pi-engine-swap.md §2): the persisted record is the source of truth, the
  * agent is rebuilt from it every POST and discarded at turn end.
  *
  * Engines are injectable so tests can pass a scripted faux engine and drive
@@ -77,10 +77,12 @@ export type AgentKind = "prober" | "teacher" | "practice";
  *  through config paths, not request state — the store import carries no
  *  chat/job machinery. */
 export function composeInstructions(kind: AgentKind, switches?: Record<string, boolean>): string {
-	// The learner-files doctrine describes tools that exist only with a
-	// library folder (fs-shared.ts): no library, no segment.
+	// The learner-files and learner-images doctrines describe tools that
+	// exist only with a library folder (fs-shared.ts): no library, no segment.
 	const library = libraryAvailable();
-	const segments = effectivePromptSegments(kind, switches ?? {}).filter((s) => library || s.path !== LEARNER_FILES_SEGMENT);
+	const segments = effectivePromptSegments(kind, switches ?? {}).filter(
+		(s) => library || (s.path !== LEARNER_FILES_SEGMENT && s.path !== LEARNER_IMAGES_SEGMENT),
+	);
 	return segments
 		.map((s) => (s.enabled ? s.overrideText! : s.sourceText))
 		.map((t) => t.trim())
@@ -143,7 +145,7 @@ export interface AgentBuildOptions {
 }
 
 /**
- * The turn's question-stop rule (docs/pi-engine-swap.md §2; Wave A
+ * The turn's question-stop rule (docs/archive/pi-engine-swap.md §2; Wave A
  * 2026-09-26, owner Option A): a question tool call (quiz /
  * ask_user_question) that RESOLVED — its synthetic "question posed" result
  * is not an error — ends the run: the learner's answer arrives as the next
@@ -193,9 +195,11 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 	// ("practice" is not a ModelRole) honest about that.
 	const engine = opts.engine ?? piEngineFor(kind as "prober" | "teacher");
 	const stopper = makeQuestionStopper(kind);
-	const systemPrompt = opts.promptSwitches
+	const narrationGuard = narrationGuardApplies(kind, engine.model, opts.tools !== undefined);
+	const composedPrompt = opts.promptSwitches
 		? composeInstructions(kind, opts.promptSwitches)
 		: cachedInstructions(kind);
+	const systemPrompt = narrationGuard ? `${composedPrompt}\n\n---\n\n${SEND_TO_USER_DELIVERY_RULE}` : composedPrompt;
 	// Debug recorder (owner, 2026-10-04): raw provider events when
 	// LH_PROVIDER_EVENTS=1 and the caller handed a chatId; undefined is
 	// the normal no-observer path (tests, env-off).
@@ -216,7 +220,7 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 				...tools.map((tool) => tool.name === "read" && tool.execute === readTool.execute
 					? { ...tool, execute: createReadTool(engine.model).execute as AgentTool<any>["execute"] }
 					: tool),
-				...(opts.tools === undefined && (engine.model.provider === CLAUDE_CODE_PROVIDER || engine.model.id.toLowerCase().includes("claude"))
+				...(sendToUserApplies(kind, engine.model, opts.tools !== undefined)
 					? [withArgumentHeal(sendToUserTool)]
 					: []),
 			],
@@ -224,6 +228,9 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 		},
 		streamFn: engine.streamFn,
 		...(providerEvents ? { onProviderStreamEvent: providerEvents } : {}),
+		// Narration-marked thinking is not learner-facing delivery. The
+		// paired hooks track successful output before allowing its question.
+		...(narrationGuard ? makeNarrationGuard() : {}),
 		// 0.87.1: shouldStopAfterTurn → finishTurn. Same call point (after
 		// tool results attach, before turn_end) and `{ action: "end" }` still
 		// exits BEFORE the steering poll — the parked-marker stranding our
@@ -343,7 +350,8 @@ export function bareQuestionTools(): Record<string, AgentTool<any>> {
  * problem + conclude (tools/practice.ts); the doctrine prompt
  * (prompts/practice/) carries the method. A successful problem pose ends
  * the run, natively for a problem-only batch and via the shared stop hook
- * for a mixed batch (for example, send_to_user + problem).
+ * for a mixed batch (including caller-injected legacy output tools).
+ * Practice uses ordinary final prose, not the explicit output tool.
  */
 export function createPracticeAgent(ctx: PracticeToolContext, opts: AgentBuildOptions = {}) {
 	const tools = opts.tools ?? practiceTools(ctx);

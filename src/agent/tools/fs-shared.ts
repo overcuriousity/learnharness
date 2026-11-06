@@ -21,7 +21,9 @@ import { AUTH_FILE, PATHS } from "../../../config.ts";
  * overlapping the data/auth folders) → the tools are not registered at
  * all (libraryRoot() === null) and resolution refuses as a second line.
  * Tree walks never follow symlinks (walkFiles), so they cannot leave the
- * library either.
+ * library either. Inside the library, dotenv files (.env, .env.*) are
+ * refused by name, as upstream does: resolution refuses them whether named
+ * directly or reached through a symlink, and walks skip them.
  *
  * Ported behaviors (mirroring pi's dist/core/tools/{ls,find,grep}.js): the
  * schemas, descriptions, output formats, and truncation notices are copied
@@ -44,9 +46,21 @@ export const WALK_TIMEOUT_MS = 10_000;
  */
 const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git", "Library", ".Trash"]);
 
+/** Upstream's dotenv denial (templates included: their names do not
+ *  guarantee safe contents). Matched case-insensitively on the basename. */
+const ENV_FILE = /^\.env(\..*)?$/i;
+
+export function isEnvFile(p: string): boolean {
+	return ENV_FILE.test(path.basename(p));
+}
+
 /** The shared prompt segment that describes the learner's files — composed
  *  only when the library (and so the file tools) is available. */
 export const LEARNER_FILES_SEGMENT = "shared/30-learner-files.md";
+
+/** The teacher's learner-images segment (show_image, visual's `image`):
+ *  both read a library file, so it is composed only with a library too. */
+export const LEARNER_IMAGES_SEGMENT = "teacher/55-images.md";
 
 export interface LibraryRoot {
 	/** LH_LIBRARY_DIR as configured (absolute, normalized) — for messages. */
@@ -148,6 +162,9 @@ export async function resolveLibraryPath(p?: string): Promise<string> {
 	for (const blocked of protectedRoots()) {
 		if (isInside(real, blocked)) throw new Error(`Path is not readable: ${p}`);
 	}
+	if (isEnvFile(requested) || isEnvFile(real)) {
+		throw new Error(`Path is not readable: ${p} (environment files may hold secrets).`);
+	}
 	return real;
 }
 
@@ -235,7 +252,8 @@ export function matchGlob(relativePath: string, pattern: string): boolean {
 }
 
 /**
- * Depth-first walk under `root`, never entering EXCLUDED_DIR_NAMES.
+ * Depth-first walk under `root`, never entering EXCLUDED_DIR_NAMES and
+ * skipping dotenv entries (isEnvFile).
  * `visit` receives absolute file paths; returning true STOPS the walk
  * (find's result limit). The deadline bounds a home-dir walk to
  * WALK_TIMEOUT_MS — partial results are the graceful degradation.
@@ -275,6 +293,7 @@ export async function walkFiles(
 				return true;
 			}
 			const full = path.join(dir, entry.name);
+			if (isEnvFile(entry.name)) continue;
 			if (entry.isDirectory()) {
 				if (EXCLUDED_DIR_NAMES.has(entry.name)) continue;
 				if (await walkDir(full)) return true;

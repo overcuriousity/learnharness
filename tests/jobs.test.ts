@@ -810,7 +810,7 @@ describe("pdf runner (sources v0)", () => {
 			assert.equal(done.status, "done");
 			assert.deepEqual(done.delivery, { kind: "result", status: "delivered" });
 			const result = done.result as PdfResult;
-			assert.equal(result.path, path.join(home, relativePath));
+			assert.equal(result.path, fs.realpathSync.native(path.join(home, relativePath)));
 			assert.match(result.brief, /integral rule/);
 			assert.deepEqual(result.pagesRead, [1, 2]);
 			assert.deepEqual(result.pagesConsulted, [1, 2]);

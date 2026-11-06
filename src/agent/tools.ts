@@ -20,6 +20,7 @@ import { planTools, type PlanToolContext } from "./tools/plan.ts";
 import { probeDoneTool, type ProbeDoneContext } from "./tools/probe.ts";
 import { proberGraphTools } from "./tools/graph.ts";
 import { libraryAvailable, libraryFileTools } from "./tools/library-tools.ts";
+import { createShowImageTool } from "./tools/show-image.ts";
 import { healToolRecord } from "./tools/heal.ts";
 import type { GraphStore } from "../core/ports.ts";
 
@@ -27,7 +28,7 @@ export { jobTools };
 export type { ProbeDoneContext } from "./tools/probe.ts";
 
 /**
- * The agent-split tool composition (docs/probe-teach-split.md §1): the
+ * The agent-split tool composition (docs/archive/probe-teach-split.md §1): the
  * PROBER and the TEACHER are different agents with different tool sets.
  * The question tools share a NAME but are genuinely DIFFERENT tools —
  * the prober's quiz has NO nodeId field at all (its declaration is built
@@ -454,6 +455,9 @@ export function createTeacherTools(
 			// reads learner-referenced files on its own terms — nothing
 			// auto-injects. Read-only, library folder only (fs-shared.ts).
 			...libraryFileTools(),
+			// The learner-image display twin of read (issue #363): teacher
+			// only, and like read only with a library folder.
+			...(libraryAvailable() ? { show_image: createShowImageTool(ctx) } : {}),
 			...planTools(ctx),
 			...withoutPdfUnlessLibrary(jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable })),
 		},

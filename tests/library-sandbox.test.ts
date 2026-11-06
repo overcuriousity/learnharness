@@ -30,12 +30,20 @@ fs.symlinkSync(outside, path.join(library, "link-to-outside"));
 fs.symlinkSync(data, path.join(library, "link-to-data"));
 fs.symlinkSync(path.join(secrets, "auth.json"), path.join(library, "link-to-auth.json"));
 fs.symlinkSync(path.join(library, "notes", "a.md"), path.join(library, "inner-link.md"));
+// Dotenv files inside the library (upstream's always-on denial):
+fs.writeFileSync(path.join(library, ".env"), "TOP-SECRET-DOTENV=1\n");
+fs.writeFileSync(path.join(library, "notes", ".env.local"), "TOP-SECRET-DOTENV-LOCAL=1\n");
+fs.writeFileSync(path.join(library, "notes", ".ENV.example"), "TOP-SECRET-DOTENV-TEMPLATE=1\n");
+fs.writeFileSync(path.join(library, "notes", ".envrc"), "ordinary direnv file\n");
+fs.symlinkSync(path.join(library, ".env"), path.join(library, "innocent.txt"));
+fs.symlinkSync(path.join(library, "notes", "a.md"), path.join(library, "notes", ".env.link"));
 
 process.env.LH_DATA_DIR = data;
 process.env.LH_AUTH_FILE = path.join(secrets, "auth.json");
 process.env.LH_LIBRARY_DIR = library;
 
-const { libraryRoot, resolveLibraryPath, LEARNER_FILES_SEGMENT } = await import("../src/agent/tools/fs-shared.ts");
+const { libraryRoot, resolveLibraryPath, LEARNER_FILES_SEGMENT, LEARNER_IMAGES_SEGMENT } = await import("../src/agent/tools/fs-shared.ts");
+const { jobTools } = await import("../src/agent/tools/jobs.ts");
 const { readTool } = await import("../src/agent/tools/read.ts");
 const { lsTool } = await import("../src/agent/tools/ls.ts");
 const { findTool } = await import("../src/agent/tools/find.ts");
@@ -78,6 +86,26 @@ describe("resolveLibraryPath", () => {
 	});
 });
 
+describe("dotenv files inside the library (upstream's denial)", () => {
+	it(".env and .env.* are refused by name, case-insensitively, directly or through a symlink", async () => {
+		for (const p of [".env", "notes/.env.local", "notes/.ENV.example", path.join(library, ".env"), "innocent.txt", "notes/.env.link"]) {
+			await assert.rejects(resolveLibraryPath(p), /not readable: .*environment files/, p);
+		}
+		await assert.rejects(readTool.execute!("t", { path: ".env" }), /environment files/);
+	});
+
+	it("lookalikes stay readable", async () => {
+		assert.equal(await text(readTool, { path: "notes/.envrc" }), "ordinary direnv file\n");
+	});
+
+	it("find and grep walks skip dotenv files", async () => {
+		const found = await text(findTool, { pattern: "*" });
+		assert.doesNotMatch(found, /\.env(\.|$|\n)/i);
+		assert.match(found, /\.envrc/);
+		assert.doesNotMatch(await text(grepTool, { pattern: "TOP-SECRET-DOTENV" }), /TOP-SECRET-DOTENV/);
+	});
+});
+
 describe("the tools inherit the sandbox", () => {
 	it("read refuses escapes and never returns the secret", async () => {
 		assert.equal(await text(readTool, { path: "notes/a.md" }), "inside the library\n");
@@ -117,18 +145,41 @@ describe("libraryRoot: unset or misconfigured = no file tools", () => {
 	it("without LH_LIBRARY_DIR the registries carry no file tools and no pdf job, and the prompt drops the learner-files segment", () => {
 		const ctx = { chatId: "c", jobStore: {} as never, spawn: () => {} } as never;
 		const withLibrary = Object.keys(createTeacherTools(ctx));
-		for (const name of ["read", "ls", "find", "grep", "pdf"]) assert.ok(withLibrary.includes(name), name);
+		for (const name of ["read", "ls", "find", "grep", "pdf", "show_image"]) assert.ok(withLibrary.includes(name), name);
 		assert.ok(composeInstructions("teacher").includes("## Learner files"));
+		assert.ok(composeInstructions("teacher").includes("## The learner's own images"));
 		const saved = process.env.LH_LIBRARY_DIR;
 		delete process.env.LH_LIBRARY_DIR;
 		try {
 			for (const registry of [createTeacherTools(ctx), createProberTools(ctx)]) {
-				for (const name of ["read", "ls", "find", "grep", "pdf"]) assert.ok(!(name in registry), name);
+				for (const name of ["read", "ls", "find", "grep", "pdf", "show_image"]) assert.ok(!(name in registry), name);
 				assert.ok("research" in registry, "research is unaffected");
 			}
 			for (const kind of ["teacher", "prober"] as const) {
 				assert.ok(!composeInstructions(kind).includes("## Learner files"), `${kind}: ${LEARNER_FILES_SEGMENT} omitted`);
 			}
+			assert.ok(!composeInstructions("teacher").includes("## The learner's own images"), `${LEARNER_IMAGES_SEGMENT} omitted`);
+		} finally {
+			process.env.LH_LIBRARY_DIR = saved;
+		}
+	});
+});
+
+describe("learner images follow the library (server fork)", () => {
+	const ctx = { chatId: "c", jobStore: {} as never, spawn: () => {} } as never;
+	const visual = () => jobTools(ctx).visual!;
+
+	it("with a library, visual offers `image` and names it in its description", () => {
+		assert.ok("image" in (visual().parameters as { properties: Record<string, unknown> }).properties);
+		assert.match(visual().description, /library folder/);
+	});
+
+	it("without a library, visual has no `image` option", () => {
+		const saved = process.env.LH_LIBRARY_DIR;
+		delete process.env.LH_LIBRARY_DIR;
+		try {
+			assert.ok(!("image" in (visual().parameters as { properties: Record<string, unknown> }).properties));
+			assert.doesNotMatch(visual().description, /`image`/);
 		} finally {
 			process.env.LH_LIBRARY_DIR = saved;
 		}
